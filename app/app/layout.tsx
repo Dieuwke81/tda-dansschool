@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AuthGate } from "./auth-gate";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,13 +46,12 @@ export default function RootLayout({
         {/* PWA / app-icon instellingen */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#000000" />
-        {/* Icon wanneer iemand je site op het startscherm zet (iOS vooral) */}
         <link rel="apple-touch-icon" href="/android-chrome-512x512.png" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white`}
       >
-        {children}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
