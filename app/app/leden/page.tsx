@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Lid = {
   id: string;
@@ -18,6 +18,7 @@ export default function LedenPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
+  const [lesFilter, setLesFilter] = useState("alle");
 
   useEffect(() => {
     async function load() {
@@ -28,7 +29,6 @@ export default function LedenPage() {
         }
 
         const text = await res.text();
-
         const [headerLine, ...lines] = text.trim().split("\n");
 
         const data: Lid[] = lines
@@ -56,24 +56,58 @@ export default function LedenPage() {
     load();
   }, []);
 
-  const gefilterdeLeden = leden.filter((lid) =>
-    lid.naam.toLowerCase().includes(zoekTerm.toLowerCase())
-  );
+  // Unieke lesgroepen voor de dropdown
+  const lesgroepen = useMemo(() => {
+    const set = new Set<string>();
+    leden.forEach((lid) => {
+      if (lid.lesgroep && lid.lesgroep.trim() !== "") {
+        set.add(lid.lesgroep.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [leden]);
+
+  // Filter op zoekterm + lesgroep
+  const gefilterdeLeden = leden.filter((lid) => {
+    const matchNaam = lid.naam
+      .toLowerCase()
+      .includes(zoekTerm.toLowerCase());
+
+    const matchLes =
+      lesFilter === "alle" || lid.lesgroep.trim() === lesFilter;
+
+    return matchNaam && matchLes;
+  });
 
   return (
     <main className="min-h-screen bg-black text-white p-6">
       <h1 className="text-2xl font-bold text-pink-500 mb-2">Leden</h1>
       <p className="text-gray-300 mb-4">
-        Deze lijst komt nu direct uit je Google Sheet (testdata).
+        Deze lijst komt direct uit je Google Sheet.
       </p>
 
-      <input
-        type="text"
-        placeholder="Zoek op naam..."
-        value={zoekTerm}
-        onChange={(e) => setZoekTerm(e.target.value)}
-        className="mb-6 w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
-      />
+      <div className="flex flex-col gap-3 mb-6">
+        <input
+          type="text"
+          placeholder="Zoek op naam..."
+          value={zoekTerm}
+          onChange={(e) => setZoekTerm(e.target.value)}
+          className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+        />
+
+        <select
+          value={lesFilter}
+          onChange={(e) => setLesFilter(e.target.value)}
+          className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+        >
+          <option value="alle">Alle lesgroepen</option>
+          {lesgroepen.map((les) => (
+            <option key={les} value={les}>
+              {les}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {loading && <p className="text-gray-400">Laden…</p>}
       {error && <p className="text-red-400">{error}</p>}
