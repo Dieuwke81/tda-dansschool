@@ -41,6 +41,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="nl">
+      <head>
+        {/* PWA / app-icon instellingen */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#000000" />
+        {/* Icon wanneer iemand je site op het startscherm zet (iOS vooral) */}
+        <link rel="apple-touch-icon" href="/android-chrome-512x512.png" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white`}
       >

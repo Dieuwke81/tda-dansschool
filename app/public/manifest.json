@@ -1,0 +1,16 @@
+{
+  "name": "TDA Dansschool",
+  "short_name": "TDA",
+  "description": "Beheeromgeving voor Tata Dans Agency",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#ec4899",
+  "icons": [
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
