@@ -1,70 +1,113 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 type Lid = {
   id: string;
   naam: string;
   email: string;
-  les: string;
+  lesgroep: string;
+  actief: string;
 };
 
-async function fetchLeden(): Promise<Lid[]> {
-  const csvUrl = "https://docs.google.com/spreadsheets/d/1xkDxiNuefHzYB__KPai0M5bXWIURporgFvKmnKTxAr4/export?format=csv&gid=0"; // <-- vervang dit
+const csvUrl =
+  "https://docs.google.com/spreadsheets/d/1xkDxiNuefHzYB__KPai0M5bXWIURporgFvKmnKTxAr4/export?format=csv&gid=0";
 
-  const res = await fetch(csvUrl);
+export default function LedenPage() {
+  const [leden, setLeden] = useState<Lid[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [zoekTerm, setZoekTerm] = useState("");
 
-  if (!res.ok) {
-    throw new Error("Kon de ledenlijst niet ophalen");
-  }
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch(csvUrl);
+        if (!res.ok) {
+          throw new Error("Kon de ledenlijst niet ophalen");
+        }
 
-  const text = await res.text();
+        const text = await res.text();
 
-  const [headerLine, ...lines] = text.trim().split("\n");
+        const [headerLine, ...lines] = text.trim().split("\n");
 
-  // We gaan ervan uit dat de kolomvolgorde is: id, naam, email, les
-  return lines.map((line) => {
-    const cells = line.split(",");
+        const data: Lid[] = lines
+          .filter((line) => line.trim().length > 0)
+          .map((line) => {
+            const cells = line.split(",");
 
-    return {
-      id: cells[0] ?? "",
-      naam: cells[1] ?? "",
-      email: cells[2] ?? "",
-      les: cells[3] ?? "",
-    };
-  });
-}
+            return {
+              id: cells[0] ?? "",
+              naam: cells[1] ?? "",
+              email: cells[2] ?? "",
+              lesgroep: cells[3] ?? "",
+              actief: cells[4] ?? "",
+            };
+          });
 
-export default async function LedenPage() {
-  const leden = await fetchLeden();
+        setLeden(data);
+      } catch (err: any) {
+        setError(err.message ?? "Er ging iets mis");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  const gefilterdeLeden = leden.filter((lid) =>
+    lid.naam.toLowerCase().includes(zoekTerm.toLowerCase())
+  );
 
   return (
     <main className="min-h-screen bg-black text-white p-6">
-      <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
+      <h1 className="text-2xl font-bold text-pink-500 mb-2">Leden</h1>
       <p className="text-gray-300 mb-4">
         Deze lijst komt nu direct uit je Google Sheet (testdata).
       </p>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-700">
-              <th className="text-left py-2 
-pr-4">ID</th>
-              <th className="text-left py-2 pr-4">Naam</th>
-              <th className="text-left py-2 pr-4">Email</th>
-              <th className="text-left py-2
- pr-4">Les</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leden.map((lid) => (
-              <tr key={lid.id} className="border-b border-gray-800">
-                <td className="py-2 pr-4">{lid.id}</td>
-                <td className="py-2 pr-4">{lid.naam}</td>
-                <td className="py-2 pr-4">{lid.email}</td>
-                <td className="py-2 pr-4">{lid.les}</td>
+      <input
+        type="text"
+        placeholder="Zoek op naam..."
+        value={zoekTerm}
+        onChange={(e) => setZoekTerm(e.target.value)}
+        className="mb-6 w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+      />
+
+      {loading && <p className="text-gray-400">Laden…</p>}
+      {error && <p className="text-red-400">{error}</p>}
+
+      {!loading && !error && gefilterdeLeden.length === 0 && (
+        <p className="text-gray-400">Geen leden gevonden.</p>
+      )}
+
+      {!loading && !error && gefilterdeLeden.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="text-left py-2 pr-4">ID</th>
+                <th className="text-left py-2 pr-4">Naam</th>
+                <th className="text-left py-2 pr-4">Email</th>
+                <th className="text-left py-2 pr-4">Lesgroep</th>
+                <th className="text-left py-2 pr-4">Actief</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {gefilterdeLeden.map((lid) => (
+                <tr key={lid.id} className="border-b border-gray-800">
+                  <td className="py-2 pr-4">{lid.id}</td>
+                  <td className="py-2 pr-4">{lid.naam}</td>
+                  <td className="py-2 pr-4">{lid.email}</td>
+                  <td className="py-2 pr-4">{lid.lesgroep}</td>
+                  <td className="py-2 pr-4">{lid.actief}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }
