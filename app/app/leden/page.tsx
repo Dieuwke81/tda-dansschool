@@ -76,6 +76,22 @@ function formatDatum(raw: string) {
     .padStart(2, "0")}-${y}`;
 }
 
+function isVandaagJarig(geboorte: string) {
+  if (!geboorte) return false;
+  const parts = geboorte.split(/[-/.]/);
+  if (parts.length !== 3) return false;
+
+  const dag = parseInt(parts[0], 10);
+  const maand = parseInt(parts[1], 10);
+  if (!dag || !maand) return false;
+
+  const vandaag = new Date();
+  return (
+    vandaag.getDate() === dag &&
+    vandaag.getMonth() + 1 === maand
+  );
+}
+
 /* ------------------------------------------------------ */
 
 export default function LedenPage() {
@@ -142,6 +158,12 @@ export default function LedenPage() {
       );
     });
   }, [leden, zoekTerm]);
+
+  // verjaardagen vandaag
+  const verjaardagenVandaag = useMemo(
+    () => leden.filter((lid) => isVandaagJarig(lid.geboortedatum)),
+    [leden]
+  );
 
   // zorg dat geselecteerdId geldig blijft
   useEffect(() => {
@@ -224,6 +246,14 @@ export default function LedenPage() {
                 })}
               </ul>
             </div>
+
+            {/* 🎂 Verjaardagen vandaag onder de scrolllijst */}
+            {verjaardagenVandaag.length > 0 && (
+              <div className="mt-3 text-sm text-pink-300">
+                🎉 Vandaag jarig:{" "}
+                {verjaardagenVandaag.map((l) => l.naam).join(", ")}
+              </div>
+            )}
 
             {/* 🪟 POPUP / MODAL MET DETAILS */}
             {isModalOpen && geselecteerdLid && (
