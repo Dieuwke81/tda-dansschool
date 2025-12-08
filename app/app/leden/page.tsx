@@ -84,6 +84,7 @@ export default function LedenPage() {
   const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
   const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -159,6 +160,15 @@ export default function LedenPage() {
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
 
+  function openLid(lidId: string) {
+    setGeselecteerdId(lidId);
+    setIsModalOpen(true);
+  }
+
+  function sluitModal() {
+    setIsModalOpen(false);
+  }
+
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white p-4 md:p-6">
@@ -186,8 +196,8 @@ export default function LedenPage() {
         )}
 
         {!loading && !error && gefilterdeLeden.length > 0 && (
-          <div className="flex flex-col gap-4">
-            {/* 📜 Scrolllijst met namen (ongeveer 5 regels hoog) */}
+          <>
+            {/* 📜 Scrolllijst met namen */}
             <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden">
               <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
                 {gefilterdeLeden.length} leden
@@ -199,7 +209,7 @@ export default function LedenPage() {
                     <li key={lid.id || lid.email}>
                       <button
                         type="button"
-                        onClick={() => setGeselecteerdId(lid.id)}
+                        onClick={() => openLid(lid.id)}
                         className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
                           actief ? "bg-pink-500/20" : ""
                         }`}
@@ -215,27 +225,30 @@ export default function LedenPage() {
               </ul>
             </div>
 
-            {/* 🧾 Detailkaart onder de lijst */}
-            <div>
-              {!geselecteerdLid ? (
-                <p className="text-gray-400">
-                  Kies een lid in de lijst om details te zien.
-                </p>
-              ) : (
-                <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 space-y-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-pink-400 mb-1">
+            {/* 🪟 POPUP / MODAL MET DETAILS */}
+            {isModalOpen && geselecteerdLid && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+                <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-5 shadow-xl">
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-lg font-bold text-pink-400">
                       {geselecteerdLid.naam}
                     </h2>
-                    <p className="text-sm text-gray-400">
-                      {geselecteerdLid.les}
-                      {geselecteerdLid.les2
-                        ? ` • 2e les: ${geselecteerdLid.les2}`
-                        : ""}
-                    </p>
+                    <button
+                      onClick={sluitModal}
+                      className="text-sm text-gray-400 hover:text-white"
+                    >
+                      ✕
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <p className="text-xs text-gray-400 mb-4">
+                    {geselecteerdLid.les}
+                    {geselecteerdLid.les2
+                      ? ` • 2e les: ${geselecteerdLid.les2}`
+                      : ""}
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-3 text-sm">
                     {/* Email */}
                     <Detail
                       label="Email"
@@ -341,10 +354,17 @@ export default function LedenPage() {
                       }
                     />
                   </div>
+
+                  <button
+                    onClick={sluitModal}
+                    className="mt-4 w-full rounded-full bg-pink-500 py-2 text-sm font-semibold text-black hover:bg-pink-600"
+                  >
+                    Sluiten
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
+          </>
         )}
       </main>
     </AuthGuard>
