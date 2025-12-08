@@ -28,12 +28,29 @@ const csvUrl =
 function fixTelefoon(nr: string) {
   if (!nr) return "";
   const schoon = nr.replace(/\D/g, "");
+  if (schoon.length === 0) return "";
+  // als er 9 cijfers zijn -> 0 ervoor (bijv. 612345678 -> 0612345678)
   if (schoon.length === 9) return "0" + schoon;
   return schoon;
 }
 
 function formatTelefoon(nr: string) {
   return fixTelefoon(nr);
+}
+
+function formatWhatsAppUrl(nr: string) {
+  const fixed = fixTelefoon(nr);
+  if (!fixed) return "";
+  let digits = fixed.replace(/\D/g, "");
+
+  // We gaan uit van NL-nummers (06.. / 0..)
+  if (digits.startsWith("0031")) {
+    digits = "31" + digits.slice(4);
+  } else if (digits.startsWith("0")) {
+    digits = "31" + digits.slice(1);
+  }
+  // Als hij al met 31 begint, laten we 'm zo
+  return `https://wa.me/${digits}`;
 }
 
 function formatIban(iban: string) {
@@ -113,12 +130,10 @@ export default function LedenPage() {
     const matchNaam = lid.naam
       .toLowerCase()
       .includes(zoekTerm.toLowerCase());
-
     const matchLes =
       lesFilter === "alle" ||
       lid.les === lesFilter ||
       lid.les2 === lesFilter;
-
     return matchNaam && matchLes;
   });
 
@@ -166,3 +181,92 @@ export default function LedenPage() {
                 <th className="text-left py-2 pr-4">IBAN</th>
               </tr>
             </thead>
+
+            <tbody>
+              {gefilterdeLeden.map((lid) => (
+                <tr
+                  key={lid.id || lid.email}
+                  className="border-b border-gray-800 align-top"
+                >
+                  <td className="py-2 pr-4">{lid.naam}</td>
+
+                  {/* 📧 Klikbaar e-mail */}
+                  <td className="py-2 pr-4">
+                    {lid.email ? (
+                      <a
+                        href={`mailto:${lid.email}`}
+                        className="text-pink-400 underline break-all"
+                      >
+                        {lid.email}
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+
+                  {/* 📞 + 💬 Telefoon + WhatsApp */}
+                  <td className="py-2 pr-4">
+                    {lid.tel1 && (
+                      <div className="mb-1">
+                        <a
+                          href={`tel:${formatTelefoon(lid.tel1)}`}
+                          className="text-pink-400 underline"
+                        >
+                          {formatTelefoon(lid.tel1)}
+                        </a>
+                        <br />
+                        <a
+                          href={formatWhatsAppUrl(lid.tel1)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-green-400 text-xs underline"
+                        >
+                          WhatsApp
+                        </a>
+                      </div>
+                    )}
+                    {lid.tel2 && (
+                      <div>
+                        <a
+                          href={`tel:${formatTelefoon(lid.tel2)}`}
+                          className="text-pink-400 underline"
+                        >
+                          {formatTelefoon(lid.tel2)}
+                        </a>
+                        <br />
+                        <a
+                          href={formatWhatsAppUrl(lid.tel2)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-green-400 text-xs underline"
+                        >
+                          WhatsApp
+                        </a>
+                      </div>
+                    )}
+                    {!lid.tel1 && !lid.tel2 && <span>-</span>}
+                  </td>
+
+                  <td className="py-2 pr-4">
+                    {lid.les}
+                    {lid.les2 && (
+                      <div className="text-xs text-gray-400">{lid.les2}</div>
+                    )}
+                  </td>
+
+                  <td className="py-2 pr-4">
+                    {formatDatum(lid.geboortedatum)}
+                  </td>
+
+                  <td className="py-2 pr-4">{lid.plaats}</td>
+
+                  <td className="py-2 pr-4">{formatIban(lid.iban)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </main>
+  );
+}
