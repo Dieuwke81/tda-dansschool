@@ -76,19 +76,43 @@ function formatDatum(raw: string) {
     .padStart(2, "0")}-${y}`;
 }
 
-function isVandaagJarig(geboorte: string) {
-  if (!geboorte) return false;
+function parseDagMaand(geboorte: string) {
+  if (!geboorte) return null;
   const parts = geboorte.split(/[-/.]/);
-  if (parts.length !== 3) return false;
+  if (parts.length !== 3) return null;
 
   const dag = parseInt(parts[0], 10);
   const maand = parseInt(parts[1], 10);
-  if (!dag || !maand) return false;
+  if (!dag || !maand) return null;
+
+  return { dag, maand };
+}
+
+function isVandaagJarig(geboorte: string) {
+  const dm = parseDagMaand(geboorte);
+  if (!dm) return false;
 
   const vandaag = new Date();
   return (
-    vandaag.getDate() === dag &&
-    vandaag.getMonth() + 1 === maand
+    vandaag.getDate() === dm.dag &&
+    vandaag.getMonth() + 1 === dm.maand
+  );
+}
+
+function isMorgenJarig(geboorte: string) {
+  const dm = parseDagMaand(geboorte);
+  if (!dm) return false;
+
+  const vandaag = new Date();
+  const morgen = new Date(
+    vandaag.getFullYear(),
+    vandaag.getMonth(),
+    vandaag.getDate() + 1
+  );
+
+  return (
+    morgen.getDate() === dm.dag &&
+    morgen.getMonth() + 1 === dm.maand
   );
 }
 
@@ -159,9 +183,13 @@ export default function LedenPage() {
     });
   }, [leden, zoekTerm]);
 
-  // verjaardagen vandaag
+  // verjaardagen vandaag & morgen
   const verjaardagenVandaag = useMemo(
     () => leden.filter((lid) => isVandaagJarig(lid.geboortedatum)),
+    [leden]
+  );
+  const verjaardagenMorgen = useMemo(
+    () => leden.filter((lid) => isMorgenJarig(lid.geboortedatum)),
     [leden]
   );
 
@@ -247,11 +275,17 @@ export default function LedenPage() {
               </ul>
             </div>
 
-            {/* 🎂 Verjaardagen vandaag onder de scrolllijst */}
+            {/* 🎂 Verjaardagen vandaag & morgen onder de scrolllijst */}
             {verjaardagenVandaag.length > 0 && (
               <div className="mt-3 text-sm text-pink-300">
                 🎉 Vandaag jarig:{" "}
                 {verjaardagenVandaag.map((l) => l.naam).join(", ")}
+              </div>
+            )}
+            {verjaardagenMorgen.length > 0 && (
+              <div className="mt-1 text-sm text-pink-300">
+                🎈 Morgen jarig:{" "}
+                {verjaardagenMorgen.map((l) => l.naam).join(", ")}
               </div>
             )}
 
@@ -414,10 +448,6 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
 
 function WhatsAppIcon() {
   return (
-    <img
-      src="/whatsapp.png"
-      alt="WhatsApp"
-      className="w-5 h-5"
-    />
+    <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />
   );
 }
