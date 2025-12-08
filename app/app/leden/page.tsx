@@ -67,7 +67,6 @@ export default function LedenPage() {
           });
 
         setLeden(data);
-        // standaard: eerste lid selecteren (als er 1 is)
         if (data.length > 0) {
           setGeselecteerdId(data[0].id);
         }
@@ -81,7 +80,6 @@ export default function LedenPage() {
     load();
   }, []);
 
-  // Unieke lesgroepen voor de dropdown (gebaseerd op eerste les)
   const lesgroepen = useMemo(() => {
     const set = new Set<string>();
     leden.forEach((lid) => {
@@ -92,7 +90,6 @@ export default function LedenPage() {
     return Array.from(set).sort();
   }, [leden]);
 
-  // Filter op zoekterm + lesgroep
   const gefilterdeLeden = leden.filter((lid) => {
     const zoek = zoekTerm.toLowerCase();
     const matchNaamOfEmail =
@@ -107,13 +104,11 @@ export default function LedenPage() {
     return matchNaamOfEmail && matchLes;
   });
 
-  // Zorg dat er altijd een geldige selectie is als de filter verandert
   useEffect(() => {
     if (gefilterdeLeden.length === 0) {
       setGeselecteerdId(null);
       return;
     }
-    // als huidige selectie niet meer in de gefilterde lijst staat -> kies eerste
     const bestaatNog = gefilterdeLeden.some(
       (lid) => lid.id === geselecteerdId
     );
@@ -171,7 +166,7 @@ export default function LedenPage() {
               <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
                 {gefilterdeLeden.length} leden
               </div>
-              <ul className="max-h-[70vh] overflow-y-auto">
+              <ul className="max-h-64 md:max-h-[70vh] overflow-y-auto">
                 {gefilterdeLeden.map((lid) => {
                   const actief = lid.id === geselecteerdId;
                   return (
@@ -260,7 +255,6 @@ export default function LedenPage() {
   );
 }
 
-// Kleine helper-component voor een label + waarde
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
