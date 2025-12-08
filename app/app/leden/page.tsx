@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import AuthGuard from "../auth-guard";
 
 type Lid = {
@@ -258,7 +259,7 @@ export default function LedenPage() {
                       value={
                         <>
                           {geselecteerdLid.tel1 && (
-                            <div className="mb-1">
+                            <div className="mb-1 flex items-center gap-2">
                               <a
                                 href={`tel:${formatTelefoon(
                                   geselecteerdLid.tel1
@@ -273,14 +274,15 @@ export default function LedenPage() {
                                 )}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="ml-2 text-green-400 text-xs"
+                                aria-label="WhatsApp"
+                                className="inline-flex"
                               >
-                                🟢 WhatsApp
+                                <WhatsAppIcon />
                               </a>
                             </div>
                           )}
                           {geselecteerdLid.tel2 && (
-                            <div>
+                            <div className="flex items-center gap-2">
                               <a
                                 href={`tel:${formatTelefoon(
                                   geselecteerdLid.tel2
@@ -295,9 +297,10 @@ export default function LedenPage() {
                                 )}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="ml-2 text-green-400 text-xs"
+                                aria-label="WhatsApp"
+                                className="inline-flex"
                               >
-                                🟢 WhatsApp
+                                <WhatsAppIcon />
                               </a>
                             </div>
                           )}
@@ -348,13 +351,7 @@ export default function LedenPage() {
   );
 }
 
-function Detail({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
@@ -362,5 +359,21 @@ function Detail({
       </div>
       <div className="whitespace-pre-line text-sm">{value}</div>
     </div>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="11" fill="#22c55e" />
+      <path
+        d="M9.5 8.2c.1-.3.2-.6.1-.9-.1-.3-.3-.5-.6-.6-.2-.1-.5-.1-.7 0-.2.1-.5.4-.6.7-.2.6-.2 1.3 0 1.9.3 1 .9 1.9 1.7 2.7s1.7 1.4 2.7 1.7c.6.2 1.3.2 1.9 0 .3-.1.6-.4.7-.6.1-.2.1-.5 0-.7-.1-.3-.3-.5-.6-.6l-.9-.3c-.2-.1-.5 0-.6.2l-.3.4c-.1.1-.3.2-.5.1-.4-.1-.8-.4-1.1-.7-.3-.3-.6-.7-.7-1.1 0-.2 0-.4.1-.5l.3-.3c.2-.2.3-.4.2-.6L9.5 8.2z"
+        fill="#ffffff"
+      />
+    </svg>
   );
 }
