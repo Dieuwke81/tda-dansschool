@@ -17,7 +17,12 @@ export const metadata: Metadata = {
   title: "TDA Dansschool",
   description: "Beheeromgeving voor Tata Dans Agency",
   icons: {
+    // favicon voor browser-tab
     icon: "/favicon.ico",
+    // “snelkoppeling” icoon (sommige browsers gebruiken deze key)
+    shortcut: "/favicon.ico",
+    // Apple touch icon (bijv. iOS homescreen)
+    apple: "/favicon.ico",
   },
   openGraph: {
     title: "TDA Dansschool",
@@ -46,6 +51,7 @@ export default function RootLayout({
         {/* PWA / app-icon instellingen */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#000000" />
+        {/* Dit mag blijven staan, is geen probleem naast metadata.icons */}
         <link rel="apple-touch-icon" href="/android-chrome-512x512.png" />
       </head>
       <body
