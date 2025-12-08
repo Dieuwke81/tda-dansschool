@@ -31,7 +31,7 @@ function fixTelefoon(nr: string) {
   if (!nr) return "";
   const schoon = nr.replace(/\D/g, "");
   if (schoon.length === 0) return "";
-  if (schoon.length === 9) return "0" + schoon; // 612345678 -> 0612345678
+  if (schoon.length === 9) return "0" + schoon;
   return schoon;
 }
 
@@ -44,7 +44,6 @@ function formatWhatsAppUrl(nr: string) {
   if (!fixed) return "";
   let digits = fixed.replace(/\D/g, "");
 
-  // We gaan uit van NL-nummer
   if (digits.startsWith("0031")) {
     digits = "31" + digits.slice(4);
   } else if (digits.startsWith("0")) {
@@ -76,62 +75,70 @@ function formatDatum(raw: string) {
     .padStart(2, "0")}-${y}`;
 }
 
+function isVandaagJarig(geboorte: string) {
+  if (!geboorte) return false;
+  const parts = geboorte.split(/[-/.]/);
+  if (parts.length !== 3) return false;
+
+  const dag = parseInt(parts[0], 10);
+  const maand = parseInt(parts[1], 10);
+  if (!dag || !maand) return false;
+
+  const vandaag = new Date();
+  return (
+    vandaag.getDate() === dag &&
+    vandaag.getMonth() + 1 === maand
+  );
+}
+
 /* ------------------------------------------------------ */
 
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
   const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      try {
-        const res = await fetch(csvUrl);
-        if (!res.ok) {
-          throw new Error("Kon de ledenlijst niet ophalen");
-        }
-        const text = await res.text();
-        const [, ...lines] = text.trim().split("\n");
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const [, ...lines] = text.trim().split("\n");
 
-        const data: Lid[] = lines
-          .filter((line) => line.trim().length > 0)
-          .map((line) => {
-            const c = line.split(",");
-            return {
-              id: c[0] ?? "",
-              naam: c[1] ?? "",
-              email: c[2] ?? "",
-              les: c[3] ?? "",
-              les2: c[4] ?? "",
-              soort: c[5] ?? "",
-              toestemming: c[6] ?? "",
-              tel1: c[7] ?? "",
-              tel2: c[8] ?? "",
-              geboortedatum: c[9] ?? "",
-              adres: c[10] ?? "",
-              postcode: c[11] ?? "",
-              plaats: c[12] ?? "",
-              iban: c[13] ?? "",
-              datumGoedkeuring: c[14] ?? "",
-            };
-          });
+      const data: Lid[] = lines.map((line) => {
+        const c = line.split(",");
+        return {
+          id: c[0] ?? "",
+          naam: c[1] ?? "",
+          email: c[2] ?? "",
+          les: c[3] ?? "",
+          les2: c[4] ?? "",
+          soort: c[5] ?? "",
+          toestemming: c[6] ?? "",
+          tel1: c[7] ?? "",
+          tel2: c[8] ?? "",
+          geboortedatum: c[9] ?? "",
+          adres: c[10] ?? "",
+          postcode: c[11] ?? "",
+          plaats: c[12] ?? "",
+          iban: c[13] ?? "",
+          datumGoedkeuring: c[14] ?? "",
+        };
+      });
 
-        setLeden(data);
-        if (data.length > 0) {
-          setGeselecteerdId(data[0].id);
-        }
-      } catch (err: any) {
-        setError(err.message ?? "Er ging iets mis");
-      } finally {
-        setLoading(false);
-      }
+      setLeden(data);
+      if (data.length > 0) setGeselecteerdId(data[0].id);
+      setLoading(false);
     }
     load();
   }, []);
 
-  // filter op naam of email
+  const verjaardagenVandaag = useMemo(() => {
+    return leden.filter((lid) =>
+      isVandaagJarig(lid.geboortedatum)
+    );
+  }, [leden]);
+
   const gefilterdeLeden = useMemo(() => {
     const zoek = zoekTerm.toLowerCase();
     return leden.filter((lid) => {
@@ -142,7 +149,6 @@ export default function LedenPage() {
     });
   }, [leden, zoekTerm]);
 
-  // zorg dat geselecteerdId geldig blijft
   useEffect(() => {
     if (gefilterdeLeden.length === 0) {
       setGeselecteerdId(null);
@@ -162,212 +168,77 @@ export default function LedenPage() {
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-pink-500 mb-2">Leden</h1>
-        <p className="text-gray-300 mb-4">
-          Deze lijst komt direct uit je Google Sheet.
-        </p>
 
-        {/* 🔍 Zoekbalk bovenaan */}
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Zoek op naam of email…"
-            value={zoekTerm}
-            onChange={(e) => setZoekTerm(e.target.value)}
-            className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
-          />
-        </div>
-
-        {loading && <p className="text-gray-400">Laden…</p>}
-        {error && <p className="text-red-400">{error}</p>}
-
-        {!loading && !error && gefilterdeLeden.length === 0 && (
-          <p className="text-gray-400">Geen leden gevonden.</p>
+        {/* 🎂 VERJAARDAGEN VANDAAG */}
+        {verjaardagenVandaag.length > 0 && (
+          <div className="mb-4 bg-pink-500/20 border border-pink-500 rounded-xl p-4 text-pink-300">
+            <strong>🎉 Vandaag jarig:</strong>{" "}
+            {verjaardagenVandaag.map((l) => l.naam).join(", ")}
+          </div>
         )}
 
-        {!loading && !error && gefilterdeLeden.length > 0 && (
-          <div className="flex flex-col gap-4">
-            {/* 📜 Scrolllijst met namen (ongeveer 5 regels hoog) */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden">
-              <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
-                {gefilterdeLeden.length} leden
-              </div>
-              <ul className="max-h-64 overflow-y-auto">
-                {gefilterdeLeden.map((lid) => {
-                  const actief = lid.id === geselecteerdId;
-                  return (
-                    <li key={lid.id || lid.email}>
-                      <button
-                        type="button"
-                        onClick={() => setGeselecteerdId(lid.id)}
-                        className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
-                          actief ? "bg-pink-500/20" : ""
-                        }`}
-                      >
-                        <div className="font-semibold">{lid.naam}</div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {lid.les || lid.les2 || "Geen les ingevuld"}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+        <input
+          type="text"
+          placeholder="Zoek op naam of email…"
+          value={zoekTerm}
+          onChange={(e) => setZoekTerm(e.target.value)}
+          className="w-full mb-4 rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+        />
+
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden mb-4">
+          <ul className="max-h-64 overflow-y-auto">
+            {gefilterdeLeden.map((lid) => (
+              <li key={lid.id}>
+                <button
+                  onClick={() => setGeselecteerdId(lid.id)}
+                  className="w-full text-left px-4 py-3 border-b border-zinc-800 hover:bg-zinc-800"
+                >
+                  {lid.naam}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {geselecteerdLid && (
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
+            <div className="font-bold text-pink-400 mb-2">
+              {geselecteerdLid.naam}
             </div>
 
-            {/* 🧾 Detailkaart onder de lijst */}
-            <div>
-              {!geselecteerdLid ? (
-                <p className="text-gray-400">
-                  Kies een lid in de lijst om details te zien.
-                </p>
-              ) : (
-                <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 space-y-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-pink-400 mb-1">
-                      {geselecteerdLid.naam}
-                    </h2>
-                    <p className="text-sm text-gray-400">
-                      {geselecteerdLid.les}
-                      {geselecteerdLid.les2
-                        ? ` • 2e les: ${geselecteerdLid.les2}`
-                        : ""}
-                    </p>
-                  </div>
+            <div className="text-sm mb-1">
+              📧{" "}
+              <a
+                href={`mailto:${geselecteerdLid.email}`}
+                className="text-pink-400 underline"
+              >
+                {geselecteerdLid.email}
+              </a>
+            </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    {/* Email */}
-                    <Detail
-                      label="Email"
-                      value={
-                        geselecteerdLid.email ? (
-                          <a
-                            href={`mailto:${geselecteerdLid.email}`}
-                            className="text-pink-400 underline break-all"
-                          >
-                            {geselecteerdLid.email}
-                          </a>
-                        ) : (
-                          <span>-</span>
-                        )
-                      }
-                    />
+            <div className="text-sm mb-1">
+              📞{" "}
+              <a
+                href={`tel:${formatTelefoon(geselecteerdLid.tel1)}`}
+                className="text-pink-400 underline"
+              >
+                {formatTelefoon(geselecteerdLid.tel1)}
+              </a>{" "}
+              <a
+                href={formatWhatsAppUrl(geselecteerdLid.tel1)}
+                target="_blank"
+                className="ml-2"
+              >
+                <img src="/whatsapp.png" className="inline w-5 h-5" />
+              </a>
+            </div>
 
-                    {/* Telefoon + WhatsApp */}
-                    <Detail
-                      label="Telefoon"
-                      value={
-                        <>
-                          {geselecteerdLid.tel1 && (
-                            <div className="mb-1 flex items-center gap-2">
-                              <a
-                                href={`tel:${formatTelefoon(
-                                  geselecteerdLid.tel1
-                                )}`}
-                                className="text-pink-400 underline"
-                              >
-                                {formatTelefoon(geselecteerdLid.tel1)}
-                              </a>
-                              <a
-                                href={formatWhatsAppUrl(
-                                  geselecteerdLid.tel1
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="WhatsApp"
-                                className="inline-flex"
-                              >
-                                <WhatsAppIcon />
-                              </a>
-                            </div>
-                          )}
-                          {geselecteerdLid.tel2 && (
-                            <div className="flex items-center gap-2">
-                              <a
-                                href={`tel:${formatTelefoon(
-                                  geselecteerdLid.tel2
-                                )}`}
-                                className="text-pink-400 underline"
-                              >
-                                {formatTelefoon(geselecteerdLid.tel2)}
-                              </a>
-                              <a
-                                href={formatWhatsAppUrl(
-                                  geselecteerdLid.tel2
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="WhatsApp"
-                                className="inline-flex"
-                              >
-                                <WhatsAppIcon />
-                              </a>
-                            </div>
-                          )}
-                          {!geselecteerdLid.tel1 &&
-                            !geselecteerdLid.tel2 && <span>-</span>}
-                        </>
-                      }
-                    />
-
-                    <Detail
-                      label="Soort"
-                      value={geselecteerdLid.soort || "-"}
-                    />
-                    <Detail
-                      label="Toestemming beeldmateriaal"
-                      value={geselecteerdLid.toestemming || "-"}
-                    />
-                    <Detail
-                      label="Geboortedatum"
-                      value={formatDatum(geselecteerdLid.geboortedatum) || "-"}
-                    />
-                    <Detail
-                      label="Adres"
-                      value={
-                        geselecteerdLid.adres
-                          ? `${geselecteerdLid.adres}\n${geselecteerdLid.postcode} ${geselecteerdLid.plaats}`
-                          : "-"
-                      }
-                    />
-                    <Detail
-                      label="IBAN"
-                      value={formatIban(geselecteerdLid.iban) || "-"}
-                    />
-                    <Detail
-                      label="Datum akkoord voorwaarden"
-                      value={
-                        formatDatum(geselecteerdLid.datumGoedkeuring) || "-"
-                      }
-                    />
-                  </div>
-                </div>
-              )}
+            <div className="text-sm">
+              🎂 {formatDatum(geselecteerdLid.geboortedatum)}
             </div>
           </div>
         )}
       </main>
     </AuthGuard>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
-        {label}
-      </div>
-      <div className="whitespace-pre-line text-sm">{value}</div>
-    </div>
-  );
-}
-
-function WhatsAppIcon() {
-  return (
-    <img
-      src="/whatsapp.png"
-      alt="WhatsApp"
-      className="w-5 h-5"
-    />
   );
 }
