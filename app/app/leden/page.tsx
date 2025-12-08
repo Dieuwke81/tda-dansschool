@@ -364,16 +364,10 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
 
 function WhatsAppIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
+    <img
+      src="/whatsapp.png"
+      alt="WhatsApp"
       className="w-5 h-5"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="11" fill="#22c55e" />
-      <path
-        d="M9.5 8.2c.1-.3.2-.6.1-.9-.1-.3-.3-.5-.6-.6-.2-.1-.5-.1-.7 0-.2.1-.5.4-.6.7-.2.6-.2 1.3 0 1.9.3 1 .9 1.9 1.7 2.7s1.7 1.4 2.7 1.7c.6.2 1.3.2 1.9 0 .3-.1.6-.4.7-.6.1-.2.1-.5 0-.7-.1-.3-.3-.5-.6-.6l-.9-.3c-.2-.1-.5 0-.6.2l-.3.4c-.1.1-.3.2-.5.1-.4-.1-.8-.4-1.1-.7-.3-.3-.6-.7-.7-1.1 0-.2 0-.4.1-.5l.3-.3c.2-.2.3-.4.2-.6L9.5 8.2z"
-        fill="#ffffff"
-      />
-    </svg>
+    />
   );
 }
