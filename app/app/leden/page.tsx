@@ -3,144 +3,143 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Lid = {
-  id: string;                    // kolom A
-  naam: string;                  // kolom B
-  email: string;                 // kolom C
-  les: string;                   // kolom D
-  les2: string;                  // kolom E
-  soort: string;                 // kolom F
-  toestemming: string;           // kolom G
-  tel1: string;                  // kolom H
-  tel2: string;                  // kolom I
-  geboortedatum: string;         // kolom J
-  adres: string;                 // kolom K
-  postcode: string;              // kolom L
-  plaats: string;                // kolom M
-  iban: string;                  // kolom N
-  datumGoedkeuring: string;      // kolom O
+  id: string;
+  naam: string;
+  email: string;
+  les: string;
+  les2: string;
+  soort: string;
+  toestemming: string;
+  tel1: string;
+  tel2: string;
+  geboortedatum: string;
+  adres: string;
+  postcode: string;
+  plaats: string;
+  iban: string;
+  datumGoedkeuring: string;
 };
 
 const csvUrl =
   "https://docs.google.com/spreadsheets/d/1xkDxiNuefHzYB__KPai0M5bXWIURporgFvKmnKTxAr4/export?format=csv&gid=0";
 
+/* -------------------- HULPFUNCTIES -------------------- */
+
+function fixTelefoon(nr: string) {
+  if (!nr) return "";
+  const schoon = nr.replace(/\D/g, "");
+  if (schoon.length === 9) return "0" + schoon;
+  return schoon;
+}
+
+function formatTelefoon(nr: string) {
+  return fixTelefoon(nr);
+}
+
+function formatIban(iban: string) {
+  if (!iban) return "";
+  const clean = iban.replace(/\s+/g, "").toUpperCase();
+  return clean.replace(/(.{4})/g, "$1 ").trim();
+}
+
+function formatDatum(raw: string) {
+  if (!raw) return "";
+  const parts = raw.split(/[-/.]/);
+  if (parts.length !== 3) return raw;
+
+  const d = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  let y = parts[2];
+
+  if (!d || !m) return raw;
+  if (y.length === 2) y = "20" + y;
+
+  return `${d.toString().padStart(2, "0")}-${m
+    .toString()
+    .padStart(2, "0")}-${y}`;
+}
+
+/* ------------------------------------------------------ */
+
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
   const [lesFilter, setLesFilter] = useState("alle");
-  const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      try {
-        const res = await fetch(csvUrl);
-        if (!res.ok) {
-          throw new Error("Kon de ledenlijst niet ophalen");
-        }
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const [, ...lines] = text.trim().split("\n");
 
-        const text = await res.text();
-        const [headerLine, ...lines] = text.trim().split("\n");
+      const data: Lid[] = lines.map((line) => {
+        const c = line.split(",");
+        return {
+          id: c[0] ?? "",
+          naam: c[1] ?? "",
+          email: c[2] ?? "",
+          les: c[3] ?? "",
+          les2: c[4] ?? "",
+          soort: c[5] ?? "",
+          toestemming: c[6] ?? "",
+          tel1: c[7] ?? "",
+          tel2: c[8] ?? "",
+          geboortedatum: c[9] ?? "",
+          adres: c[10] ?? "",
+          postcode: c[11] ?? "",
+          plaats: c[12] ?? "",
+          iban: c[13] ?? "",
+          datumGoedkeuring: c[14] ?? "",
+        };
+      });
 
-        const data: Lid[] = lines
-          .filter((line) => line.trim().length > 0)
-          .map((line) => {
-            const cells = line.split(",");
-
-            return {
-              id: cells[0] ?? "",
-              naam: cells[1] ?? "",
-              email: cells[2] ?? "",
-              les: cells[3] ?? "",
-              les2: cells[4] ?? "",
-              soort: cells[5] ?? "",
-              toestemming: cells[6] ?? "",
-              tel1: cells[7] ?? "",
-              tel2: cells[8] ?? "",
-              geboortedatum: cells[9] ?? "",
-              adres: cells[10] ?? "",
-              postcode: cells[11] ?? "",
-              plaats: cells[12] ?? "",
-              iban: cells[13] ?? "",
-              datumGoedkeuring: cells[14] ?? "",
-            };
-          });
-
-        setLeden(data);
-        if (data.length > 0) {
-          setGeselecteerdId(data[0].id);
-        }
-      } catch (err: any) {
-        setError(err.message ?? "Er ging iets mis");
-      } finally {
-        setLoading(false);
-      }
+      setLeden(data);
+      setLoading(false);
     }
-
     load();
   }, []);
 
   const lesgroepen = useMemo(() => {
     const set = new Set<string>();
     leden.forEach((lid) => {
-      if (lid.les && lid.les.trim() !== "") {
-        set.add(lid.les.trim());
-      }
+      if (lid.les) set.add(lid.les);
+      if (lid.les2) set.add(lid.les2);
     });
     return Array.from(set).sort();
   }, [leden]);
 
   const gefilterdeLeden = leden.filter((lid) => {
-    const zoek = zoekTerm.toLowerCase();
-    const matchNaamOfEmail =
-      lid.naam.toLowerCase().includes(zoek) ||
-      lid.email.toLowerCase().includes(zoek);
+    const matchNaam = lid.naam
+      .toLowerCase()
+      .includes(zoekTerm.toLowerCase());
 
     const matchLes =
       lesFilter === "alle" ||
-      lid.les.trim() === lesFilter ||
-      lid.les2.trim() === lesFilter;
+      lid.les === lesFilter ||
+      lid.les2 === lesFilter;
 
-    return matchNaamOfEmail && matchLes;
+    return matchNaam && matchLes;
   });
 
-  useEffect(() => {
-    if (gefilterdeLeden.length === 0) {
-      setGeselecteerdId(null);
-      return;
-    }
-    const bestaatNog = gefilterdeLeden.some(
-      (lid) => lid.id === geselecteerdId
-    );
-    if (!bestaatNog) {
-      setGeselecteerdId(gefilterdeLeden[0].id);
-    }
-  }, [gefilterdeLeden, geselecteerdId]);
-
-  const geselecteerdLid =
-    gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
-
   return (
-    <main className="min-h-screen bg-black text-white p-6">
-      <h1 className="text-2xl font-bold text-pink-500 mb-2">Leden</h1>
-      <p className="text-gray-300 mb-4">
-        Deze lijst komt direct uit je Google Sheet.
-      </p>
+    <main className="min-h-screen bg-black text-white p-4 md:p-6">
+      <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 mb-6">
+      <div className="flex flex-col md:flex-row gap-3 mb-6">
         <input
           type="text"
-          placeholder="Zoek op naam of email..."
+          placeholder="Zoek op naam..."
           value={zoekTerm}
           onChange={(e) => setZoekTerm(e.target.value)}
-          className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+          className="rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
         />
 
         <select
           value={lesFilter}
           onChange={(e) => setLesFilter(e.target.value)}
-          className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+          className="rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
         >
           <option value="alle">Alle lessen</option>
           {lesgroepen.map((les) => (
@@ -152,116 +151,18 @@ export default function LedenPage() {
       </div>
 
       {loading && <p className="text-gray-400">Laden…</p>}
-      {error && <p className="text-red-400">{error}</p>}
 
-      {!loading && !error && gefilterdeLeden.length === 0 && (
-        <p className="text-gray-400">Geen leden gevonden.</p>
-      )}
-
-      {!loading && !error && gefilterdeLeden.length > 0 && (
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* LINKERKANT: lijst met namen */}
-          <div className="md:w-1/3">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden">
-              <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
-                {gefilterdeLeden.length} leden
-              </div>
-              <ul className="max-h-64 md:max-h-[70vh] overflow-y-auto">
-                {gefilterdeLeden.map((lid) => {
-                  const actief = lid.id === geselecteerdId;
-                  return (
-                    <li key={lid.id}>
-                      <button
-                        type="button"
-                        onClick={() => setGeselecteerdId(lid.id)}
-                        className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
-                          actief ? "bg-pink-500/20" : ""
-                        }`}
-                      >
-                        <div className="font-semibold">{lid.naam}</div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {lid.les || lid.les2 || "Geen les ingevuld"}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-
-          {/* RECHTERKANT: detailkaart */}
-          <div className="md:flex-1">
-            {!geselecteerdLid ? (
-              <p className="text-gray-400">
-                Kies een lid in de lijst om de details te zien.
-              </p>
-            ) : (
-              <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 space-y-4">
-                <div>
-                  <h2 className="text-xl font-bold text-pink-400 mb-1">
-                    {geselecteerdLid.naam}
-                  </h2>
-                  <p className="text-sm text-gray-400">
-                    {geselecteerdLid.les}
-                    {geselecteerdLid.les2
-                      ? ` • 2e les: ${geselecteerdLid.les2}`
-                      : ""}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <Detail label="Email" value={geselecteerdLid.email} />
-                  <Detail
-                    label="Telefoon"
-                    value={
-                      geselecteerdLid.tel2
-                        ? `${geselecteerdLid.tel1}\n${geselecteerdLid.tel2}`
-                        : geselecteerdLid.tel1
-                    }
-                  />
-                  <Detail
-                    label="Soort"
-                    value={geselecteerdLid.soort || "-"}
-                  />
-                  <Detail
-                    label="Toestemming beeldmateriaal"
-                    value={geselecteerdLid.toestemming || "-"}
-                  />
-                  <Detail
-                    label="Geboortedatum"
-                    value={geselecteerdLid.geboortedatum || "-"}
-                  />
-                  <Detail
-                    label="Adres"
-                    value={
-                      geselecteerdLid.adres
-                        ? `${geselecteerdLid.adres}\n${geselecteerdLid.postcode} ${geselecteerdLid.plaats}`
-                        : "-"
-                    }
-                  />
-                  <Detail label="IBAN" value={geselecteerdLid.iban || "-"} />
-                  <Detail
-                    label="Datum akkoord voorwaarden"
-                    value={geselecteerdLid.datumGoedkeuring || "-"}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </main>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
-        {label}
-      </div>
-      <div className="whitespace-pre-line text-sm">{value}</div>
-    </div>
-  );
-}
+      {!loading && (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="text-left py-2 pr-4">Naam</th>
+                <th className="text-left py-2 pr-4">Email</th>
+                <th className="text-left py-2 pr-4">Telefoon</th>
+                <th className="text-left py-2 pr-4">Les</th>
+                <th className="text-left py-2 pr-4">Geboortedatum</th>
+                <th className="text-left py-2 pr-4">Plaats</th>
+                <th className="text-left py-2 pr-4">IBAN</th>
+              </tr>
+            </thead>
