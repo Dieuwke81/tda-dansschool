@@ -29,6 +29,7 @@ export default function LedenPage() {
   const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
   const [lesFilter, setLesFilter] = useState("alle");
+  const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -66,6 +67,10 @@ export default function LedenPage() {
           });
 
         setLeden(data);
+        // standaard: eerste lid selecteren (als er 1 is)
+        if (data.length > 0) {
+          setGeselecteerdId(data[0].id);
+        }
       } catch (err: any) {
         setError(err.message ?? "Er ging iets mis");
       } finally {
@@ -90,7 +95,7 @@ export default function LedenPage() {
   // Filter op zoekterm + lesgroep
   const gefilterdeLeden = leden.filter((lid) => {
     const zoek = zoekTerm.toLowerCase();
-    const matchNaam =
+    const matchNaamOfEmail =
       lid.naam.toLowerCase().includes(zoek) ||
       lid.email.toLowerCase().includes(zoek);
 
@@ -99,8 +104,26 @@ export default function LedenPage() {
       lid.les.trim() === lesFilter ||
       lid.les2.trim() === lesFilter;
 
-    return matchNaam && matchLes;
+    return matchNaamOfEmail && matchLes;
   });
+
+  // Zorg dat er altijd een geldige selectie is als de filter verandert
+  useEffect(() => {
+    if (gefilterdeLeden.length === 0) {
+      setGeselecteerdId(null);
+      return;
+    }
+    // als huidige selectie niet meer in de gefilterde lijst staat -> kies eerste
+    const bestaatNog = gefilterdeLeden.some(
+      (lid) => lid.id === geselecteerdId
+    );
+    if (!bestaatNog) {
+      setGeselecteerdId(gefilterdeLeden[0].id);
+    }
+  }, [gefilterdeLeden, geselecteerdId]);
+
+  const geselecteerdLid =
+    gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
 
   return (
     <main className="min-h-screen bg-black text-white p-6">
@@ -109,6 +132,7 @@ export default function LedenPage() {
         Deze lijst komt direct uit je Google Sheet.
       </p>
 
+      {/* Filters */}
       <div className="flex flex-col gap-3 mb-6">
         <input
           type="text"
@@ -140,50 +164,110 @@ export default function LedenPage() {
       )}
 
       {!loading && !error && gefilterdeLeden.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-700">
-                <th className="text-left py-2 pr-4">Naam</th>
-                <th className="text-left py-2 pr-4">Email</th>
-                <th className="text-left py-2 pr-4">Les</th>
-                <th className="text-left py-2 pr-4">2e Les</th>
-                <th className="text-left py-2 pr-4">Soort</th>
-                <th className="text-left py-2 pr-4">Toestemming</th>
-                <th className="text-left py-2 pr-4">Telefoon</th>
-                <th className="text-left py-2 pr-4">Geboortedatum</th>
-                <th className="text-left py-2 pr-4">Adres</th>
-                <th className="text-left py-2 pr-4">Postcode</th>
-                <th className="text-left py-2 pr-4">Plaats</th>
-                <th className="text-left py-2 pr-4">IBAN</th>
-                <th className="text-left py-2 pr-4">Datum akkoord</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gefilterdeLeden.map((lid) => (
-                <tr key={lid.id} className="border-b border-gray-800">
-                  <td className="py-2 pr-4">{lid.naam}</td>
-                  <td className="py-2 pr-4">{lid.email}</td>
-                  <td className="py-2 pr-4 whitespace-pre-line">{lid.les}</td>
-                  <td className="py-2 pr-4 whitespace-pre-line">{lid.les2}</td>
-                  <td className="py-2 pr-4">{lid.soort}</td>
-                  <td className="py-2 pr-4">{lid.toestemming}</td>
-                  <td className="py-2 pr-4 whitespace-pre-line">
-                    {lid.tel1}
-                    {lid.tel2 ? `\n${lid.tel2}` : ""}
-                  </td>
-                  <td className="py-2 pr-4">{lid.geboortedatum}</td>
-                  <td className="py-2 pr-4">{lid.adres}</td>
-                  <td className="py-2 pr-4">{lid.postcode}</td>
-                  <td className="py-2 pr-4">{lid.plaats}</td>
-                  <td className="py-2 pr-4">{lid.iban}</td>
-                  <td className="py-2 pr-4">{lid.datumGoedkeuring}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* LINKERKANT: lijst met namen */}
+          <div className="md:w-1/3">
+            <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
+                {gefilterdeLeden.length} leden
+              </div>
+              <ul className="max-h-[70vh] overflow-y-auto">
+                {gefilterdeLeden.map((lid) => {
+                  const actief = lid.id === geselecteerdId;
+                  return (
+                    <li key={lid.id}>
+                      <button
+                        type="button"
+                        onClick={() => setGeselecteerdId(lid.id)}
+                        className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
+                          actief ? "bg-pink-500/20" : ""
+                        }`}
+                      >
+                        <div className="font-semibold">{lid.naam}</div>
+                        <div className="text-xs text-gray-400 truncate">
+                          {lid.les || lid.les2 || "Geen les ingevuld"}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+
+          {/* RECHTERKANT: detailkaart */}
+          <div className="md:flex-1">
+            {!geselecteerdLid ? (
+              <p className="text-gray-400">
+                Kies een lid in de lijst om de details te zien.
+              </p>
+            ) : (
+              <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 space-y-4">
+                <div>
+                  <h2 className="text-xl font-bold text-pink-400 mb-1">
+                    {geselecteerdLid.naam}
+                  </h2>
+                  <p className="text-sm text-gray-400">
+                    {geselecteerdLid.les}
+                    {geselecteerdLid.les2
+                      ? ` • 2e les: ${geselecteerdLid.les2}`
+                      : ""}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <Detail label="Email" value={geselecteerdLid.email} />
+                  <Detail
+                    label="Telefoon"
+                    value={
+                      geselecteerdLid.tel2
+                        ? `${geselecteerdLid.tel1}\n${geselecteerdLid.tel2}`
+                        : geselecteerdLid.tel1
+                    }
+                  />
+                  <Detail
+                    label="Soort"
+                    value={geselecteerdLid.soort || "-"}
+                  />
+                  <Detail
+                    label="Toestemming beeldmateriaal"
+                    value={geselecteerdLid.toestemming || "-"}
+                  />
+                  <Detail
+                    label="Geboortedatum"
+                    value={geselecteerdLid.geboortedatum || "-"}
+                  />
+                  <Detail
+                    label="Adres"
+                    value={
+                      geselecteerdLid.adres
+                        ? `${geselecteerdLid.adres}\n${geselecteerdLid.postcode} ${geselecteerdLid.plaats}`
+                        : "-"
+                    }
+                  />
+                  <Detail label="IBAN" value={geselecteerdLid.iban || "-"} />
+                  <Detail
+                    label="Datum akkoord voorwaarden"
+                    value={geselecteerdLid.datumGoedkeuring || "-"}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </main>
+  );
+}
+
+// Kleine helper-component voor een label + waarde
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
+        {label}
+      </div>
+      <div className="whitespace-pre-line text-sm">{value}</div>
+    </div>
   );
 }
