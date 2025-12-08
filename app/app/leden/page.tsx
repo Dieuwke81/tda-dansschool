@@ -7,8 +7,18 @@ type Lid = {
   id: string;
   naam: string;
   email: string;
-  lesgroep: string;
-  actief: string;
+  les: string;
+  tweedeLes: string;
+  soort: string;
+  toestemming: string;
+  telefoon1: string;
+  telefoon2: string;
+  geboortedatum: string;
+  adres: string;
+  postcode: string;
+  plaats: string;
+  iban: string;
+  datumGoedkeuring: string;
 };
 
 const csvUrl =
@@ -17,49 +27,49 @@ const csvUrl =
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
   const [lesFilter, setLesFilter] = useState("alle");
 
   useEffect(() => {
     async function load() {
-      try {
-        const res = await fetch(csvUrl);
-        if (!res.ok) {
-          throw new Error("Kon de ledenlijst niet ophalen");
-        }
-        const text = await res.text();
-        const [, ...lines] = text.trim().split("\n");
+      const res = await fetch(csvUrl);
+      const text = await res.text();
+      const [, ...lines] = text.trim().split("\n");
 
-        const data: Lid[] = lines
-          .filter((line) => line.trim().length > 0)
-          .map((line) => {
-            const cells = line.split(",");
-            return {
-              id: cells[0] ?? "",
-              naam: cells[1] ?? "",
-              email: cells[2] ?? "",
-              lesgroep: cells[3] ?? "",
-              actief: cells[4] ?? "",
-            };
-          });
+      const data: Lid[] = lines.map((line) => {
+        const c = line.split(",");
 
-        setLeden(data);
-      } catch (err: any) {
-        setError(err.message ?? "Er ging iets mis");
-      } finally {
-        setLoading(false);
-      }
+        return {
+          id: c[0] ?? "",
+          naam: c[1] ?? "",
+          email: c[2] ?? "",
+          les: c[3] ?? "",
+          tweedeLes: c[4] ?? "",
+          soort: c[5] ?? "",
+          toestemming: c[6] ?? "",
+          telefoon1: c[7] ?? "",
+          telefoon2: c[8] ?? "",
+          geboortedatum: c[9] ?? "",
+          adres: c[10] ?? "",
+          postcode: c[11] ?? "",
+          plaats: c[12] ?? "",
+          iban: c[13] ?? "",
+          datumGoedkeuring: c[14] ?? "",
+        };
+      });
+
+      setLeden(data);
+      setLoading(false);
     }
+
     load();
   }, []);
 
   const lesgroepen = useMemo(() => {
     const set = new Set<string>();
     leden.forEach((lid) => {
-      if (lid.lesgroep && lid.lesgroep.trim() !== "") {
-        set.add(lid.lesgroep.trim());
-      }
+      if (lid.les) set.add(lid.les);
+      if (lid.tweedeLes) set.add(lid.tweedeLes);
     });
     return Array.from(set).sort();
   }, [leden]);
@@ -68,34 +78,36 @@ export default function LedenPage() {
     const matchNaam = lid.naam
       .toLowerCase()
       .includes(zoekTerm.toLowerCase());
+
     const matchLes =
-      lesFilter === "alle" || lid.lesgroep.trim() === lesFilter;
+      lesFilter === "alle" ||
+      lid.les === lesFilter ||
+      lid.tweedeLes === lesFilter;
+
     return matchNaam && matchLes;
   });
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white p-6">
-        <h1 className="text-2xl font-bold text-pink-500 mb-2">Leden</h1>
-        <p className="text-gray-300 mb-4">
-          Deze lijst komt direct uit je Google Sheet.
-        </p>
+        <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
 
+        {/* Filters */}
         <div className="flex flex-col gap-3 mb-6">
           <input
             type="text"
             placeholder="Zoek op naam..."
             value={zoekTerm}
             onChange={(e) => setZoekTerm(e.target.value)}
-            className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+            className="rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
           />
 
           <select
             value={lesFilter}
             onChange={(e) => setLesFilter(e.target.value)}
-            className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
+            className="rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
           >
-            <option value="alle">Alle lesgroepen</option>
+            <option value="alle">Alle lessen</option>
             {lesgroepen.map((les) => (
               <option key={les} value={les}>
                 {les}
@@ -105,32 +117,45 @@ export default function LedenPage() {
         </div>
 
         {loading && <p className="text-gray-400">Laden…</p>}
-        {error && <p className="text-red-400">{error}</p>}
 
-        {!loading && !error && gefilterdeLeden.length === 0 && (
-          <p className="text-gray-400">Geen leden gevonden.</p>
-        )}
-
-        {!loading && !error && gefilterdeLeden.length > 0 && (
+        {!loading && (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 pr-4">ID</th>
-                  <th className="text-left py-2 pr-4">Naam</th>
-                  <th className="text-left py-2 pr-4">Email</th>
-                  <th className="text-left py-2 pr-4">Lesgroep</th>
-                  <th className="text-left py-2 pr-4">Actief</th>
+            <table className="min-w-full text-sm border border-zinc-800">
+              <thead className="bg-zinc-900">
+                <tr>
+                  <th className="p-2">Naam</th>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Les</th>
+                  <th className="p-2">2e Les</th>
+                  <th className="p-2">Soort</th>
+                  <th className="p-2">Toestemming</th>
+                  <th className="p-2">Telefoon</th>
+                  <th className="p-2">Geboortedatum</th>
+                  <th className="p-2">Plaats</th>
                 </tr>
               </thead>
               <tbody>
                 {gefilterdeLeden.map((lid) => (
-                  <tr key={lid.id} className="border-b border-gray-800">
-                    <td className="py-2 pr-4">{lid.id}</td>
-                    <td className="py-2 pr-4">{lid.naam}</td>
-                    <td className="py-2 pr-4">{lid.email}</td>
-                    <td className="py-2 pr-4">{lid.lesgroep}</td>
-                    <td className="py-2 pr-4">{lid.actief}</td>
+                  <tr
+                    key={lid.id}
+                    className="border-t border-zinc-800 hover:bg-zinc-900"
+                  >
+                    <td className="p-2">{lid.naam}</td>
+                    <td className="p-2">{lid.email}</td>
+                    <td className="p-2">{lid.les}</td>
+                    <td className="p-2">{lid.tweedeLes}</td>
+                    <td className="p-2">{lid.soort}</td>
+                    <td className="p-2">{lid.toestemming}</td>
+                    <td className="p-2">
+                      {lid.telefoon1}
+                      {lid.telefoon2 && (
+                        <span className="block text-xs text-gray-400">
+                          {lid.telefoon2}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2">{lid.geboortedatum}</td>
+                    <td className="p-2">{lid.plaats}</td>
                   </tr>
                 ))}
               </tbody>
