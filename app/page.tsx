@@ -7,10 +7,9 @@ import { useRouter } from "next/navigation";
 export default function HomePage() {
   const router = useRouter();
   const [rol, setRol] = useState<string | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
     const isIngelogd = localStorage.getItem("ingelogd");
     const opgeslagenRol = localStorage.getItem("rol");
 
@@ -18,8 +17,18 @@ export default function HomePage() {
       router.push("/login");
     } else {
       setRol(opgeslagenRol);
+      setIsCheckingAuth(false);
     }
   }, [router]);
+
+  if (isCheckingAuth) {
+    // Optioneel: simpeler "loading" scherm tijdens auth-check
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-gray-400">Bezig met controleren...</p>
+      </main>
+    );
+  }
 
   function uitloggen() {
     localStorage.removeItem("ingelogd");
@@ -45,7 +54,8 @@ export default function HomePage() {
 
       {rol && (
         <p className="mb-4 text-sm text-gray-400">
-          Ingelogd als: <span className="text-pink-400 font-semibold">{rol}</span>
+          Ingelogd als:{" "}
+          <span className="text-pink-400 font-semibold">{rol}</span>
         </p>
       )}
 
