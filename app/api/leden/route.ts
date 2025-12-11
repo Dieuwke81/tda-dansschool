@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  // Haal de URL van je Google Sheet uit de server-omgeving
   const sheetUrl = process.env.SHEET_URL;
 
   if (!sheetUrl) {
@@ -12,30 +11,28 @@ export async function GET() {
   }
 
   try {
-    const res = await fetch(sheetUrl, {
-      // je Sheet geeft CSV terug
-      cache: "no-store",
-    });
+    const res = await fetch(sheetUrl);
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: "Kon Google Sheet niet ophalen" },
-        { status: 500 }
+        { error: "Kon de Google Sheet niet ophalen" },
+        { status: 502 }
       );
     }
 
-    const csv = await res.text();
+    const text = await res.text();
 
-    return new Response(csv, {
+    // We sturen de CSV gewoon door, net als de originele URL deed
+    return new Response(text, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
       },
     });
   } catch (err) {
-    console.error(err);
+    console.error("Fout bij ophalen sheet:", err);
     return NextResponse.json(
-      { error: "Onbekende fout bij ophalen van de sheet" },
+      { error: "Interne serverfout bij het ophalen van de leden" },
       { status: 500 }
     );
   }
