@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AuthGuard from "../auth-guard";
 
 type Lid = {
@@ -18,13 +17,10 @@ type Lid = {
   adres: string;
   postcode: string;
   plaats: string;
-  iban: string;
   datumGoedkeuring: string;
 };
 
-const csvUrl = "/api/leden";
-
-/* -------------------- HULPFUNCTIES -------------------- */
+/* ---------- HULPFUNCTIES ---------- */
 
 function fixTelefoon(nr: string) {
   if (!nr) return "";
@@ -43,19 +39,13 @@ function formatWhatsAppUrl(nr: string) {
   if (!fixed) return "";
   let digits = fixed.replace(/\D/g, "");
 
-  // We gaan uit van NL-nummer
+  // ga uit van NL-nummer
   if (digits.startsWith("0031")) {
     digits = "31" + digits.slice(4);
   } else if (digits.startsWith("0")) {
     digits = "31" + digits.slice(1);
   }
   return `https://wa.me/${digits}`;
-}
-
-function formatIban(iban: string) {
-  if (!iban) return "";
-  const clean = iban.replace(/\s+/g, "").toUpperCase();
-  return clean.replace(/(.{4})/g, "$1 ").trim();
 }
 
 function formatDatum(raw: string) {
@@ -75,47 +65,17 @@ function formatDatum(raw: string) {
     .padStart(2, "0")}-${y}`;
 }
 
-function parseDagMaand(geboorte: string) {
-  if (!geboorte) return null;
-  const parts = geboorte.split(/[-/.]/);
+function getDagMaand(raw: string): { dag: number; maand: number } | null {
+  if (!raw) return null;
+  const parts = raw.split(/[-/.]/);
   if (parts.length !== 3) return null;
-
-  const dag = parseInt(parts[0], 10);
-  const maand = parseInt(parts[1], 10);
-  if (!dag || !maand) return null;
-
-  return { dag, maand };
+  const d = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (!d || !m) return null;
+  return { dag: d, maand: m };
 }
 
-function isVandaagJarig(geboorte: string) {
-  const dm = parseDagMaand(geboorte);
-  if (!dm) return false;
-
-  const vandaag = new Date();
-  return (
-    vandaag.getDate() === dm.dag &&
-    vandaag.getMonth() + 1 === dm.maand
-  );
-}
-
-function isMorgenJarig(geboorte: string) {
-  const dm = parseDagMaand(geboorte);
-  if (!dm) return false;
-
-  const vandaag = new Date();
-  const morgen = new Date(
-    vandaag.getFullYear(),
-    vandaag.getMonth(),
-    vandaag.getDate() + 1
-  );
-
-  return (
-    morgen.getDate() === dm.dag &&
-    morgen.getMonth() + 1 === dm.maand
-  );
-}
-
-/* ------------------------------------------------------ */
+/* ---------------------------------- */
 
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
@@ -123,12 +83,13 @@ export default function LedenPage() {
   const [error, setError] = useState<string | null>(null);
   const [zoekTerm, setZoekTerm] = useState("");
   const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(csvUrl);
+        setLoading(true);
+        const res = await fetch("/api/leden");
         if (!res.ok) {
           throw new Error("Kon de ledenlijst niet ophalen");
         }
@@ -139,6 +100,11 @@ export default function LedenPage() {
           .filter((line) => line.trim().length > 0)
           .map((line) => {
             const c = line.split(",");
+
+            // LET OP: IBAN bestaat niet meer in de sheet
+            // Kolommen nu: A=id, B=naam, C=email, D=les, E=2e les, F=soort,
+            // G=toestemming, H=tel1, I=tel2, J=geboortedatum, K=adres,
+            // L=postcode, M=plaats, N=datum goedkeuring
             return {
               id: c[0] ?? "",
               naam: c[1] ?? "",
@@ -153,8 +119,7 @@ export default function LedenPage() {
               adres: c[10] ?? "",
               postcode: c[11] ?? "",
               plaats: c[12] ?? "",
-              iban: c[13] ?? "",
-              datumGoedkeuring: c[14] ?? "",
+              datumGoedkeuring: c[13] ?? "",
             };
           });
 
@@ -171,52 +136,47 @@ export default function LedenPage() {
     load();
   }, []);
 
-  // filter op naam of email
   const gefilterdeLeden = useMemo(() => {
     const zoek = zoekTerm.toLowerCase();
-    return leden.filter((lid) => {
-      return (
+    return leden.filter(
+      (lid) =>
         lid.naam.toLowerCase().includes(zoek) ||
         lid.email.toLowerCase().includes(zoek)
-      );
-    });
-  }, [leden, zoekTerm]);
-
-  // verjaardagen vandaag & morgen
-  const verjaardagenVandaag = useMemo(
-    () => leden.filter((lid) => isVandaagJarig(lid.geboortedatum)),
-    [leden]
-  );
-  const verjaardagenMorgen = useMemo(
-    () => leden.filter((lid) => isMorgenJarig(lid.geboortedatum)),
-    [leden]
-  );
-
-  // zorg dat geselecteerdId geldig blijft
-  useEffect(() => {
-    if (gefilterdeLeden.length === 0) {
-      setGeselecteerdId(null);
-      return;
-    }
-    const bestaatNog = gefilterdeLeden.some(
-      (lid) => lid.id === geselecteerdId
     );
-    if (!bestaatNog) {
-      setGeselecteerdId(gefilterdeLeden[0].id);
-    }
-  }, [gefilterdeLeden, geselecteerdId]);
+  }, [leden, zoekTerm]);
 
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
 
-  function openLid(lidId: string) {
-    setGeselecteerdId(lidId);
-    setIsModalOpen(true);
-  }
+  // Verjaardagen vandaag & morgen
+  const { jarigVandaag, jarigMorgen } = useMemo(() => {
+    const vandaag = new Date();
+    const morgen = new Date();
+    morgen.setDate(vandaag.getDate() + 1);
 
-  function sluitModal() {
-    setIsModalOpen(false);
-  }
+    const dVandaag = vandaag.getDate();
+    const mVandaag = vandaag.getMonth() + 1;
+    const dMorgen = morgen.getDate();
+    const mMorgen = morgen.getMonth() + 1;
+
+    const vandaagNamen: string[] = [];
+    const morgenNamen: string[] = [];
+
+    leden.forEach((lid) => {
+      const dm = getDagMaand(lid.geboortedatum);
+      if (!dm) return;
+      if (dm.dag === dVandaag && dm.maand === mVandaag) {
+        vandaagNamen.push(lid.naam);
+      } else if (dm.dag === dMorgen && dm.maand === mMorgen) {
+        morgenNamen.push(lid.naam);
+      }
+    });
+
+    return {
+      jarigVandaag: vandaagNamen,
+      jarigMorgen: morgenNamen,
+    };
+  }, [leden]);
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
@@ -226,11 +186,11 @@ export default function LedenPage() {
           Deze lijst komt direct uit je Google Sheet.
         </p>
 
-        {/* 🔍 Zoekbalk bovenaan */}
+        {/* Zoekbalk */}
         <div className="mb-4">
           <input
             type="text"
-            placeholder="Zoek op naam of email…"
+            placeholder="Zoek op naam of email..."
             value={zoekTerm}
             onChange={(e) => setZoekTerm(e.target.value)}
             className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
@@ -246,8 +206,8 @@ export default function LedenPage() {
 
         {!loading && !error && gefilterdeLeden.length > 0 && (
           <>
-            {/* 📜 Scrolllijst met namen */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden">
+            {/* Scroll-lijst met namen */}
+            <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden mb-3">
               <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
                 {gefilterdeLeden.length} leden
               </div>
@@ -258,7 +218,10 @@ export default function LedenPage() {
                     <li key={lid.id || lid.email}>
                       <button
                         type="button"
-                        onClick={() => openLid(lid.id)}
+                        onClick={() => {
+                          setGeselecteerdId(lid.id);
+                          setShowModal(true);
+                        }}
                         className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
                           actief ? "bg-pink-500/20" : ""
                         }`}
@@ -274,167 +237,43 @@ export default function LedenPage() {
               </ul>
             </div>
 
-            {/* 🎂 Verjaardagen vandaag & morgen onder de scrolllijst */}
-            {verjaardagenVandaag.length > 0 && (
-              <div className="mt-3 text-sm text-pink-300">
-                🎉 Vandaag jarig:{" "}
-                {verjaardagenVandaag.map((l) => l.naam).join(", ")}
-              </div>
-            )}
-            {verjaardagenMorgen.length > 0 && (
-              <div className="mt-1 text-sm text-pink-300">
-                🎈 Morgen jarig:{" "}
-                {verjaardagenMorgen.map((l) => l.naam).join(", ")}
-              </div>
-            )}
-
-            {/* 🪟 POPUP / MODAL MET DETAILS */}
-            {isModalOpen && geselecteerdLid && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-                <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl p-5 shadow-xl">
-                  <div className="flex justify-between items-center mb-3">
-                    <h2 className="text-lg font-bold text-pink-400">
-                      {geselecteerdLid.naam}
-                    </h2>
-                    <button
-                      onClick={sluitModal}
-                      className="text-sm text-gray-400 hover:text-white"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-gray-400 mb-4">
-                    {geselecteerdLid.les}
-                    {geselecteerdLid.les2
-                      ? ` • 2e les: ${geselecteerdLid.les2}`
-                      : ""}
-                  </p>
-
-                  <div className="grid grid-cols-1 gap-3 text-sm">
-                    {/* Email */}
-                    <Detail
-                      label="Email"
-                      value={
-                        geselecteerdLid.email ? (
-                          <a
-                            href={`mailto:${geselecteerdLid.email}`}
-                            className="text-pink-400 underline break-all"
-                          >
-                            {geselecteerdLid.email}
-                          </a>
-                        ) : (
-                          <span>-</span>
-                        )
-                      }
-                    />
-
-                    {/* Telefoon + WhatsApp */}
-                    <Detail
-                      label="Telefoon"
-                      value={
-                        <>
-                          {geselecteerdLid.tel1 && (
-                            <div className="mb-1 flex items-center gap-2">
-                              <a
-                                href={`tel:${formatTelefoon(
-                                  geselecteerdLid.tel1
-                                )}`}
-                                className="text-pink-400 underline"
-                              >
-                                {formatTelefoon(geselecteerdLid.tel1)}
-                              </a>
-                              <a
-                                href={formatWhatsAppUrl(
-                                  geselecteerdLid.tel1
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="WhatsApp"
-                                className="inline-flex"
-                              >
-                                <WhatsAppIcon />
-                              </a>
-                            </div>
-                          )}
-                          {geselecteerdLid.tel2 && (
-                            <div className="flex items-center gap-2">
-                              <a
-                                href={`tel:${formatTelefoon(
-                                  geselecteerdLid.tel2
-                                )}`}
-                                className="text-pink-400 underline"
-                              >
-                                {formatTelefoon(geselecteerdLid.tel2)}
-                              </a>
-                              <a
-                                href={formatWhatsAppUrl(
-                                  geselecteerdLid.tel2
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="WhatsApp"
-                                className="inline-flex"
-                              >
-                                <WhatsAppIcon />
-                              </a>
-                            </div>
-                          )}
-                          {!geselecteerdLid.tel1 &&
-                            !geselecteerdLid.tel2 && <span>-</span>}
-                        </>
-                      }
-                    />
-
-                    <Detail
-                      label="Soort"
-                      value={geselecteerdLid.soort || "-"}
-                    />
-                    <Detail
-                      label="Toestemming beeldmateriaal"
-                      value={geselecteerdLid.toestemming || "-"}
-                    />
-                    <Detail
-                      label="Geboortedatum"
-                      value={formatDatum(geselecteerdLid.geboortedatum) || "-"}
-                    />
-                    <Detail
-                      label="Adres"
-                      value={
-                        geselecteerdLid.adres
-                          ? `${geselecteerdLid.adres}\n${geselecteerdLid.postcode} ${geselecteerdLid.plaats}`
-                          : "-"
-                      }
-                    />
-                    <Detail
-                      label="IBAN"
-                      value={formatIban(geselecteerdLid.iban) || "-"}
-                    />
-                    <Detail
-                      label="Datum akkoord voorwaarden"
-                      value={
-                        formatDatum(geselecteerdLid.datumGoedkeuring) || "-"
-                      }
-                    />
-                  </div>
-
-                  <button
-                    onClick={sluitModal}
-                    className="mt-4 w-full rounded-full bg-pink-500 py-2 text-sm font-semibold text-black hover:bg-pink-600"
-                  >
-                    Sluiten
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Verjaardagen onder de lijst */}
+            <div className="space-y-1 mb-4 text-sm">
+              {jarigVandaag.length > 0 && (
+                <p className="text-pink-400">
+                  🎉 Vandaag jarig: {jarigVandaag.join(", ")}
+                </p>
+              )}
+              {jarigMorgen.length > 0 && (
+                <p className="text-pink-300">
+                  🎂 Morgen jarig: {jarigMorgen.join(", ")}
+                </p>
+              )}
+            </div>
           </>
+        )}
+
+        {/* Modal met details */}
+        {showModal && geselecteerdLid && (
+          <DetailModal
+            lid={geselecteerdLid}
+            onClose={() => setShowModal(false)}
+          />
         )}
       </main>
     </AuthGuard>
   );
 }
 
-function Detail({ label, value }: { label: string; value: ReactNode }) {
+/* ---------- Detail componenten ---------- */
+
+function Detail({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
@@ -446,7 +285,127 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function WhatsAppIcon() {
+  return <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />;
+}
+
+function DetailModal({
+  lid,
+  onClose,
+}: {
+  lid: Lid;
+  onClose: () => void;
+}) {
   return (
-    <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <button
+          className="absolute right-4 top-4 text-gray-400 hover:text-white text-xl"
+          onClick={onClose}
+          aria-label="Sluiten"
+        >
+          ×
+        </button>
+
+        <h2 className="text-xl font-bold text-pink-400 mb-1">{lid.naam}</h2>
+        <p className="text-sm text-gray-400 mb-4">
+          {lid.les}
+          {lid.les2 ? ` • 2e les: ${lid.les2}` : ""}
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 text-sm">
+          <Detail
+            label="Email"
+            value={
+              lid.email ? (
+                <a
+                  href={`mailto:${lid.email}`}
+                  className="text-pink-400 underline break-all"
+                >
+                  {lid.email}
+                </a>
+              ) : (
+                <span>-</span>
+              )
+            }
+          />
+
+          <Detail
+            label="Telefoon"
+            value={
+              <>
+                {lid.tel1 && (
+                  <div className="mb-1 flex items-center gap-2">
+                    <a
+                      href={`tel:${formatTelefoon(lid.tel1)}`}
+                      className="text-pink-400 underline"
+                    >
+                      {formatTelefoon(lid.tel1)}
+                    </a>
+                    <a
+                      href={formatWhatsAppUrl(lid.tel1)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="WhatsApp"
+                      className="inline-flex"
+                    >
+                      <WhatsAppIcon />
+                    </a>
+                  </div>
+                )}
+                {lid.tel2 && (
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`tel:${formatTelefoon(lid.tel2)}`}
+                      className="text-pink-400 underline"
+                    >
+                      {formatTelefoon(lid.tel2)}
+                    </a>
+                    <a
+                      href={formatWhatsAppUrl(lid.tel2)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="WhatsApp"
+                      className="inline-flex"
+                    >
+                      <WhatsAppIcon />
+                    </a>
+                  </div>
+                )}
+                {!lid.tel1 && !lid.tel2 && <span>-</span>}
+              </>
+            }
+          />
+
+          <Detail label="Soort" value={lid.soort || "-"} />
+          <Detail
+            label="Toestemming beeldmateriaal"
+            value={lid.toestemming || "-"}
+          />
+          <Detail
+            label="Geboortedatum"
+            value={formatDatum(lid.geboortedatum) || "-"}
+          />
+          <Detail
+            label="Adres"
+            value={
+              lid.adres
+                ? `${lid.adres}\n${lid.postcode} ${lid.plaats}`
+                : "-"
+            }
+          />
+          <Detail
+            label="Datum akkoord voorwaarden"
+            value={formatDatum(lid.datumGoedkeuring) || "-"}
+          />
+        </div>
+
+        <button
+          className="mt-6 w-full bg-pink-500 hover:bg-pink-600 transition-colors rounded-full py-3 font-semibold"
+          onClick={onClose}
+        >
+          Sluiten
+        </button>
+      </div>
+    </div>
   );
 }
