@@ -1,38 +1,29 @@
-// app/api/leden/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
-  const sheetUrl = process.env.SHEET_URL;
+export async function POST(req: NextRequest) {
+  // Wat de gebruiker invoert op het loginformulier
+  const body = await req.json();
+  const wachtwoord = body.wachtwoord as string | undefined;
 
-  if (!sheetUrl) {
+  // Het geheime wachtwoord uit Vercel
+  const correct = process.env.LOGIN_PASSWORD;
+
+  if (!correct) {
+    // Server is niet goed ingesteld
     return NextResponse.json(
-      { error: "SHEET_URL ontbreekt op de server" },
+      { success: false, error: "Server-misconfiguratie" },
       { status: 500 }
     );
   }
 
-  try {
-    const res = await fetch(sheetUrl, { cache: "no-store" });
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: "Kon de Google Sheet niet ophalen" },
-        { status: 500 }
-      );
-    }
-
-    const csv = await res.text();
-
-    return new NextResponse(csv, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-      },
-    });
-  } catch (error) {
-    console.error("Fout bij ophalen sheet:", error);
+  if (!wachtwoord || wachtwoord !== correct) {
+    // Fout wachtwoord
     return NextResponse.json(
-      { error: "Er ging iets mis bij het ophalen van de sheet" },
-      { status: 500 }
+      { success: false, error: "Onjuist wachtwoord" },
+      { status: 401 }
     );
   }
+
+  // Goed wachtwoord
+  return NextResponse.json({ success: true });
 }
