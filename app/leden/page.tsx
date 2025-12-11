@@ -22,8 +22,7 @@ type Lid = {
   datumGoedkeuring: string;
 };
 
-const csvUrl =
-  "https://docs.google.com/spreadsheets/d/1xkDxiNuefHzYB__KPai0M5bXWIURporgFvKmnKTxAr4/export?format=csv&gid=0";
+const csvUrl = "/api/leden";
 
 /* -------------------- HULPFUNCTIES -------------------- */
 
