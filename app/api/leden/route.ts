@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/leden/route.ts
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const sheetUrl = process.env.SHEET_URL;
-  const serverKey = process.env.SHEET_KEY;
 
   if (!sheetUrl) {
     return NextResponse.json(
@@ -11,21 +11,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!serverKey) {
-    return NextResponse.json(
-      { error: "SHEET_KEY ontbreekt op de server" },
-      { status: 500 }
-    );
-  }
-
-  // 🔐 controleer geheime sleutel uit header
-  const clientKey = request.headers.get("x-sheet-key");
-  if (clientKey !== serverKey) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const res = await fetch(sheetUrl);
+    const res = await fetch(sheetUrl, { cache: "no-store" });
     if (!res.ok) {
       return NextResponse.json(
         { error: "Kon de Google Sheet niet ophalen" },
