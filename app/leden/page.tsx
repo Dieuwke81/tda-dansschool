@@ -45,6 +45,7 @@ function formatWhatsAppUrl(nr: string) {
   } else if (digits.startsWith("0")) {
     digits = "31" + digits.slice(1);
   }
+
   return `https://wa.me/${digits}`;
 }
 
@@ -101,7 +102,6 @@ export default function LedenPage() {
           .map((line) => {
             const c = line.split(",");
 
-            // LET OP: IBAN bestaat niet meer in de sheet
             // Kolommen nu: A=id, B=naam, C=email, D=les, E=2e les, F=soort,
             // G=toestemming, H=tel1, I=tel2, J=geboortedatum, K=adres,
             // L=postcode, M=plaats, N=datum goedkeuring
@@ -133,6 +133,7 @@ export default function LedenPage() {
         setLoading(false);
       }
     }
+
     load();
   }, []);
 
@@ -255,10 +256,7 @@ export default function LedenPage() {
 
         {/* Modal met details */}
         {showModal && geselecteerdLid && (
-          <DetailModal
-            lid={geselecteerdLid}
-            onClose={() => setShowModal(false)}
-          />
+          <DetailModal lid={geselecteerdLid} onClose={() => setShowModal(false)} />
         )}
       </main>
     </AuthGuard>
@@ -267,13 +265,7 @@ export default function LedenPage() {
 
 /* ---------- Detail componenten ---------- */
 
-function Detail({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
+function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
@@ -288,13 +280,7 @@ function WhatsAppIcon() {
   return <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />;
 }
 
-function DetailModal({
-  lid,
-  onClose,
-}: {
-  lid: Lid;
-  onClose: () => void;
-}) {
+function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
       <div className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl p-6 relative max-h-[90vh] overflow-y-auto">
@@ -388,9 +374,7 @@ function DetailModal({
           <Detail
             label="Adres"
             value={
-              lid.adres
-                ? `${lid.adres}\n${lid.postcode} ${lid.plaats}`
-                : "-"
+              lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"
             }
           />
           <Detail
