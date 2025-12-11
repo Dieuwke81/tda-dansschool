@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const sheetUrl = process.env.SHEET_URL;
+  const serverKey = process.env.SHEET_KEY;
 
   if (!sheetUrl) {
     return NextResponse.json(
@@ -10,29 +11,40 @@ export async function GET() {
     );
   }
 
+  if (!serverKey) {
+    return NextResponse.json(
+      { error: "SHEET_KEY ontbreekt op de server" },
+      { status: 500 }
+    );
+  }
+
+  // 🔐 controleer geheime sleutel uit header
+  const clientKey = request.headers.get("x-sheet-key");
+  if (clientKey !== serverKey) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const res = await fetch(sheetUrl);
-
     if (!res.ok) {
       return NextResponse.json(
         { error: "Kon de Google Sheet niet ophalen" },
-        { status: 502 }
+        { status: 500 }
       );
     }
 
-    const text = await res.text();
+    const csv = await res.text();
 
-    // We sturen de CSV gewoon door, net als de originele URL deed
-    return new Response(text, {
+    return new NextResponse(csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
       },
     });
-  } catch (err) {
-    console.error("Fout bij ophalen sheet:", err);
+  } catch (error) {
+    console.error("Fout bij ophalen sheet:", error);
     return NextResponse.json(
-      { error: "Interne serverfout bij het ophalen van de leden" },
+      { error: "Er ging iets mis bij het ophalen van de sheet" },
       { status: 500 }
     );
   }
