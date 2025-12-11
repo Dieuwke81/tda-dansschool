@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast";
 
-// Tijdelijk gedeeld wachtwoord
-const juistWachtwoord = "tda123";
-
 export default function LoginPage() {
   const [wachtwoord, setWachtwoord] = useState("");
   const [rol, setRol] = useState<Rol>("gast");
   const [fout, setFout] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   // Als er al een rol in localStorage staat, kies die standaard in de dropdown
@@ -23,19 +21,39 @@ export default function LoginPage() {
     }
   }, []);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFout(null);
+    setLoading(true);
 
-    if (wachtwoord === juistWachtwoord) {
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ wachtwoord }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setFout("Onjuist wachtwoord");
+        return;
+      }
+
+      // Succesvol ingelogd
       if (typeof window !== "undefined") {
         window.localStorage.setItem("ingelogd", "ja");
         window.localStorage.setItem("rol", rol);
       }
-      // Na succesvol inloggen ga je naar de startpagina
+
       router.push("/");
-    } else {
-      setFout("Onjuist wachtwoord");
+    } catch (err) {
+      console.error(err);
+      setFout("Er ging iets mis bij het inloggen");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -75,9 +93,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full bg-pink-500 hover:bg-pink-600 transition-colors rounded py-2 font-semibold"
+            disabled={loading}
+            className="w-full bg-pink-500 hover:bg-pink-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors rounded py-2 font-semibold"
           >
-            Inloggen
+            {loading ? "Bezig..." : "Inloggen"}
           </button>
         </form>
       </div>
