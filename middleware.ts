@@ -7,18 +7,34 @@ function isAllowed(pathname: string, rol: Rol) {
     return rol === "eigenaar" || rol === "docent";
   }
 
+  // Alleen eigenaar mag naar /hash (hash-maker)
+  if (pathname.startsWith("/hash")) {
+    return rol === "eigenaar";
+  }
+
+  // Alles andere mag (bijv. /, /login wordt al apart afgehandeld)
   return true;
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Altijd toegestaan
+  // Altijd toegestaan (anders breekt Next / assets / api)
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.json" ||
+    pathname.startsWith("/android-chrome") ||
+    pathname.startsWith("/apple-touch-icon") ||
+    pathname.startsWith("/icons") ||
+    pathname.endsWith(".png") ||
+    pathname.endsWith(".svg") ||
+    pathname.endsWith(".jpg") ||
+    pathname.endsWith(".jpeg") ||
+    pathname.endsWith(".webp") ||
+    pathname.endsWith(".ico")
   ) {
     return NextResponse.next();
   }
