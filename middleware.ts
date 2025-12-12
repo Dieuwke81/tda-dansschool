@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession, cookieName, type Rol } from "./lib/auth";
+import { ... } from "@/lib/auth";
 
 function isAllowed(pathname: string, rol: Rol) {
   // Alleen eigenaar/docent mogen naar leden/lessen
