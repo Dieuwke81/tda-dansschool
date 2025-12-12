@@ -1,5 +1,7 @@
+
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession, cookieName, type Rol } from "@/lib/auth";
+import bcrypt from "bcryptjs";
+import { signSession, cookieName } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -7,7 +9,7 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
-// mini CSV parser (werkt ook met komma’s in quotes)
+// simpele CSV line parser (kan quotes aan)
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -17,6 +19,7 @@ function parseCsvLine(line: string): string[] {
     const ch = line[i];
 
     if (ch === '"') {
+      // dubbele quote binnen quotes => escaped quote
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
@@ -36,73 +39,130 @@ function parseCsvLine(line: string): string[] {
   }
 
   out.push(cur);
-  return out.map((x) => x.trim());
+  return out.map((v) => v.trim());
 }
 
-export async function GET(req: NextRequest) {
-  const token = req.cookies.get(cookieName)?.value;
-  if (!token) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
-
-  let rol: Rol = "gast";
+export async function POST(req: NextRequest) {
+  // 0) Lees body: username + wachtwoord
   let username = "";
+  let wachtwoord = "";
 
   try {
-    const session = await verifySession(token);
-    rol = (session.rol ?? "gast") as Rol;
-    username = clean(session.username);
+    const body = await req.json();
+    username = clean(body?.username);
+    wachtwoord = String(body?.wachtwoord ?? "");
   } catch {
-    return NextResponse.json({ error: "Ongeldige sessie" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, error: "Ongeldige request body" },
+      { status: 400 }
+    );
   }
 
-  if (rol !== "lid") {
-    return NextResponse.json({ error: "Alleen voor leden" }, { status: 403 });
-  }
-  if (!username) {
-    return NextResponse.json({ error: "Geen username in sessie" }, { status: 400 });
+  if (!username || !wachtwoord) {
+    return NextResponse.json(
+      { success: false, error: "Username en wachtwoord zijn verplicht" },
+      { status: 400 }
+    );
   }
 
+  // 1) Eigenaar-login via ENV
+  const ownerUser = clean(process.env.OWNER_USERNAME);
+  const ownerPass = String(process.env.OWNER_PASSWORD ?? "");
+
+  if (ownerUser && ownerPass && username === ownerUser) {
+    if (wachtwoord !== ownerPass) {
+      return NextResponse.json(
+        { success: false, error: "Onjuiste inloggegevens" },
+        { status: 401 }
+      );
+    }
+
+    const token = await signSession({ rol: "eigenaar", username });
+    const res = NextResponse.json({ success: true, rol: "eigenaar" });
+
+    res.cookies.set(cookieName, token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    return res;
+  }
+
+  // 2) Lid-login via Google Sheet (O=username, P=password_hash)
   const sheetUrl = process.env.SHEET_URL;
   if (!sheetUrl) {
-    return NextResponse.json({ error: "SHEET_URL ontbreekt" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "SHEET_URL ontbreekt op de server" },
+      { status: 500 }
+    );
   }
 
-  const r = await fetch(sheetUrl, { cache: "no-store" });
-  if (!r.ok) {
-    return NextResponse.json({ error: "Kon sheet niet ophalen" }, { status: 500 });
+  let csv = "";
+  try {
+    const r = await fetch(sheetUrl, { cache: "no-store" });
+    if (!r.ok) {
+      return NextResponse.json(
+        { success: false, error: "Kon de Google Sheet niet ophalen" },
+        { status: 500 }
+      );
+    }
+    csv = await r.text();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Fout bij ophalen sheet" },
+      { status: 500 }
+    );
   }
 
-  const csv = await r.text();
-  const lines = csv.split("\n").map((l) => l.replace(/\r/g, "")).filter(Boolean);
-  const [, ...rows] = lines;
+  const lines = csv.trim().split("\n");
+  const [, ...rows] = lines; // header overslaan
 
   // A..N = 0..13, O=username=14, P=password_hash=15
-  const row = rows
+  const match = rows
+    .filter((l) => l.trim().length > 0)
     .map(parseCsvLine)
     .find((c) => clean(c[14]) === username);
 
-  if (!row) {
-    return NextResponse.json({ error: "Lid niet gevonden" }, { status: 404 });
+  if (!match) {
+    return NextResponse.json(
+      { success: false, error: "Onjuiste inloggegevens" },
+      { status: 401 }
+    );
   }
 
-  const data = {
-    id: clean(row[0]),
-    naam: clean(row[1]),
-    email: clean(row[2]),
-    les: clean(row[3]),
-    tweedeLes: clean(row[4]),
-    soort: clean(row[5]),
-    toestemmingBeeldmateriaal: clean(row[6]),
-    telefoon1: clean(row[7]),
-    telefoon2: clean(row[8]),
-    geboortedatum: clean(row[9]),
-    adres: clean(row[10]),
-    postcode: clean(row[11]),
-    plaats: clean(row[12]),
-    datumGoedkeuring: clean(row[13]),
-    username: clean(row[14]),
-  };
+  const hash = clean(match[15]);
+  if (!hash) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Voor dit account is nog geen wachtwoord ingesteld",
+      },
+      { status: 401 }
+    );
+  }
 
-  return NextResponse.json({ success: true, data }, { status: 200 });
-}
+  const ok = await bcrypt.compare(wachtwoord, hash);
+  if (!ok) {
+    return NextResponse.json(
+      { success: false, error: "Onjuiste inloggegevens" },
+      { status: 401 }
+    );
+  }
+
+  // ✅ rol = lid + username in de session
+  const token = await signSession({ rol: "lid", username });
+  const res = NextResponse.json({ success: true, rol: "lid" });
+
+  res.cookies.set(cookieName, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  return res;
+       }
