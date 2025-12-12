@@ -2,10 +2,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AuthGuard from "@/app/auth-guard";
+import { useRouter } from "next/navigation";
 
 type MijnData = {
-  id: string;
   naam: string;
   email: string;
   les: string;
@@ -18,34 +17,35 @@ type MijnData = {
   adres: string;
   postcode: string;
   plaats: string;
-  datumGoedkeuring: string;
-  username: string;
 };
 
 export default function MijnPagina() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [fout, setFout] = useState<string | null>(null);
-  const [mijn, setMijn] = useState<MijnData | null>(null);
+  const [data, setData] = useState<MijnData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
-      setFout(null);
-
       try {
         const res = await fetch("/api/mijn", { cache: "no-store" });
-        const json = await res.json().catch(() => null);
+        const d = await res.json().catch(() => null);
 
-        if (!res.ok || !json?.success) {
-          if (!cancelled) setFout(json?.error || "Kon gegevens niet laden");
+        if (!res.ok) {
+          if (!cancelled) {
+            setError(d?.error || "Kon je gegevens niet ophalen");
+            if (res.status === 401) router.replace("/login");
+          }
           return;
         }
 
-        if (!cancelled) setMijn(json.data as MijnData);
+        if (!cancelled) {
+          setData(d as MijnData);
+        }
       } catch {
-        if (!cancelled) setFout("Kon gegevens niet laden");
+        if (!cancelled) setError("Kon je gegevens niet ophalen");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -55,32 +55,73 @@ export default function MijnPagina() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
+
+  async function uitloggen() {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // negeren
+    }
+    router.replace("/login");
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-gray-300">Je gegevens worden geladen…</p>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+        <p className="text-red-400 mb-4">{error}</p>
+        <button onClick={uitloggen} className="text-gray-400 underline text-sm">
+          Uitloggen
+        </button>
+      </main>
+    );
+  }
+
+  if (!data) return null;
 
   return (
-    <AuthGuard allowedRoles={["lid"]}>
-      <main className="min-h-screen bg-black text-white p-6 flex justify-center">
-        <div className="w-full max-w-xl bg-zinc-900 rounded-xl border border-zinc-700 p-6">
-          <h1 className="text-2xl font-bold text-pink-500 mb-4">Mijn gegevens</h1>
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-xl bg-zinc-900 rounded-xl p-6 border border-zinc-700">
+        <h1 className="text-2xl font-bold text-pink-500 mb-4">Mijn gegevens</h1>
 
-          {loading && <p className="text-gray-400">Gegevens laden…</p>}
-
-          {!loading && fout && (
-            <p className="text-red-400 text-sm">{fout}</p>
-          )}
-
-          {!loading && !fout && mijn && (
-            <div className="space-y-3 text-sm">
-              <div><span className="text-gray-400">Naam:</span> {mijn.naam}</div>
-              <div><span className="text-gray-400">E-mail:</span> {mijn.email}</div>
-              <div><span className="text-gray-400">Les:</span> {mijn.les}</div>
-              <div><span className="text-gray-400">2e les:</span> {mijn.tweedeLes}</div>
-              <div><span className="text-gray-400">Telefoon:</span> {mijn.telefoon1}</div>
-              <div><span className="text-gray-400">Adres:</span> {mijn.adres}, {mijn.postcode} {mijn.plaats}</div>
-            </div>
-          )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <Field label="Naam" value={data.naam} />
+          <Field label="Email" value={data.email} />
+          <Field label="Les" value={data.les} />
+          <Field label="2e les" value={data.tweedeLes} />
+          <Field label="Soort" value={data.soort} />
+          <Field label="Toestemming beeldmateriaal" value={data.toestemmingBeeldmateriaal} />
+          <Field label="Telefoon 1" value={data.telefoon1} />
+          <Field label="Telefoon 2" value={data.telefoon2} />
+          <Field label="Geboortedatum" value={data.geboortedatum} />
+          <Field label="Adres" value={data.adres} />
+          <Field label="Postcode" value={data.postcode} />
+          <Field label="Plaats" value={data.plaats} />
         </div>
-      </main>
-    </AuthGuard>
+
+        <div className="mt-6 flex justify-end">
+          <button onClick={uitloggen} className="text-gray-400 underline text-sm">
+            Uitloggen
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-black/40 rounded-lg border border-zinc-800 p-3">
+      <div className="text-gray-400 mb-1">{label}</div>
+      <div className="text-white break-words">{value || "-"}</div>
+    </div>
   );
 }
