@@ -1,22 +1,20 @@
+
 import { SignJWT, jwtVerify } from "jose";
 
 export type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
 const COOKIE_NAME = "tda_session";
-
-function getSecretKey() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel)");
-  }
-  return new TextEncoder().encode(secret);
-}
-
 export const cookieName = COOKIE_NAME;
+
+const secret = process.env.AUTH_SECRET;
+if (!secret) {
+  throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel)");
+}
+const key = new TextEncoder().encode(secret);
 
 export type SessionPayload = {
   rol: Rol;
-  username?: string; // voor leden
+  username?: string; // ✅ nodig voor /mijn
 };
 
 export async function signSession(payload: SessionPayload) {
@@ -24,10 +22,10 @@ export async function signSession(payload: SessionPayload) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(getSecretKey());
+    .sign(key);
 }
 
 export async function verifySession(token: string) {
-  const { payload } = await jwtVerify(token, getSecretKey());
+  const { payload } = await jwtVerify(token, key);
   return payload as SessionPayload;
 }
