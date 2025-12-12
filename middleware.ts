@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession, getCookieName, type Rol } from "@/lib/auth";
+import { verifySession, cookieName, type Rol } from "./lib/auth";
 
 function isAllowed(pathname: string, rol: Rol) {
   // Alleen eigenaar/docent mogen naar leden/lessen
@@ -12,17 +12,25 @@ function isAllowed(pathname: string, rol: Rol) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // niet blokkeren: assets, api, login
+  // Niet blokkeren: Next assets, api, login, bestanden
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
+    pathname === "/login" ||
     pathname.startsWith("/favicon") ||
-    pathname === "/login"
+    pathname.startsWith("/manifest") ||
+    pathname.startsWith("/android-chrome") ||
+    pathname.startsWith("/apple-touch-icon") ||
+    pathname.startsWith("/og-image") ||
+    pathname.startsWith("/robots.txt") ||
+    pathname.startsWith("/sitemap.xml")
   ) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get(getCookieName())?.value;
+  const token = req.cookies.get(cookieName())?.value;
+
+  // Geen cookie → naar login
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
