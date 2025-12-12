@@ -3,66 +3,81 @@
 import { useEffect, useState } from "react";
 import AuthGuard from "@/app/auth-guard";
 
-type SessionData = {
-  loggedIn?: boolean;
-  rol?: "lid" | "eigenaar" | "docent" | "gast";
+type MijnData = {
+  id: string;
+  naam: string;
+  email: string;
+  les: string;
+  tweedeLes: string;
+  soort: string;
+  toestemmingBeeldmateriaal: string;
+  telefoon1: string;
+  telefoon2: string;
+  geboortedatum: string;
+  adres: string;
+  postcode: string;
+  plaats: string;
+  datumGoedkeuring: string;
+  username: string;
 };
 
 export default function MijnPagina() {
   const [loading, setLoading] = useState(true);
+  const [fout, setFout] = useState<string | null>(null);
+  const [mijn, setMijn] = useState<MijnData | null>(null);
 
   useEffect(() => {
-    async function loadSession() {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setFout(null);
+
       try {
-        // Alleen om even “warm” te checken; AuthGuard doet de echte bescherming
-        await fetch("/api/session", { cache: "no-store" });
+        const res = await fetch("/api/mijn", { cache: "no-store" });
+        const json = await res.json().catch(() => null);
+
+        if (!res.ok || !json?.success) {
+          if (!cancelled) setFout(json?.error || "Kon gegevens niet laden");
+          return;
+        }
+
+        if (!cancelled) setMijn(json.data as MijnData);
+      } catch {
+        if (!cancelled) setFout("Kon gegevens niet laden");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    loadSession();
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-gray-400">Gegevens laden…</p>
-      </main>
-    );
-  }
 
   return (
     <AuthGuard allowedRoles={["lid"]}>
       <main className="min-h-screen bg-black text-white p-6 flex justify-center">
         <div className="w-full max-w-xl bg-zinc-900 rounded-xl border border-zinc-700 p-6">
-          <h1 className="text-2xl font-bold text-pink-500 mb-4">
-            Mijn gegevens
-          </h1>
+          <h1 className="text-2xl font-bold text-pink-500 mb-4">Mijn gegevens</h1>
 
-          <p className="text-gray-300 mb-6">
-            Welkom! Op deze pagina zie je straks je eigen gegevens.
-          </p>
+          {loading && <p className="text-gray-400">Gegevens laden…</p>}
 
-          <div className="space-y-3 text-sm">
-            <div>
-              <span className="text-gray-400">Naam:</span>{" "}
-              <span className="text-white">—</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Les:</span>{" "}
-              <span className="text-white">—</span>
-            </div>
-            <div>
-              <span className="text-gray-400">E-mail:</span>{" "}
-              <span className="text-white">—</span>
-            </div>
-          </div>
+          {!loading && fout && (
+            <p className="text-red-400 text-sm">{fout}</p>
+          )}
 
-          <p className="text-xs text-gray-500 mt-6">
-            (Deze gegevens worden in de volgende stap automatisch uit de sheet
-            geladen.)
-          </p>
+          {!loading && !fout && mijn && (
+            <div className="space-y-3 text-sm">
+              <div><span className="text-gray-400">Naam:</span> {mijn.naam}</div>
+              <div><span className="text-gray-400">E-mail:</span> {mijn.email}</div>
+              <div><span className="text-gray-400">Les:</span> {mijn.les}</div>
+              <div><span className="text-gray-400">2e les:</span> {mijn.tweedeLes}</div>
+              <div><span className="text-gray-400">Telefoon:</span> {mijn.telefoon1}</div>
+              <div><span className="text-gray-400">Adres:</span> {mijn.adres}, {mijn.postcode} {mijn.plaats}</div>
+            </div>
+          )}
         </div>
       </main>
     </AuthGuard>
