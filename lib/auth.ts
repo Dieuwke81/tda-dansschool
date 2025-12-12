@@ -2,16 +2,18 @@ import { SignJWT, jwtVerify } from "jose";
 
 export type Rol = "eigenaar" | "docent" | "gast";
 
-const cookieName = "tda_session";
+const COOKIE_NAME = "tda_session";
 
-function secretKey() {
+function getSecretKey() {
   const secret = process.env.AUTH_SECRET;
-  if (!secret) throw new Error("AUTH_SECRET ontbreekt");
+  if (!secret) {
+    throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel Environment Variables)");
+  }
   return new TextEncoder().encode(secret);
 }
 
-export function getCookieName() {
-  return cookieName;
+export function cookieName() {
+  return COOKIE_NAME;
 }
 
 export async function signSession(payload: { rol: Rol }) {
@@ -19,10 +21,10 @@ export async function signSession(payload: { rol: Rol }) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(secretKey());
+    .sign(getSecretKey());
 }
 
 export async function verifySession(token: string) {
-  const { payload } = await jwtVerify(token, secretKey());
+  const { payload } = await jwtVerify(token, getSecretKey());
   return payload as { rol?: Rol };
 }
