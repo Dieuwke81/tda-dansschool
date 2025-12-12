@@ -13,7 +13,10 @@ function LoginInner() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/";
+
+  // Alleen interne redirects toestaan
+  const nextRaw = searchParams.get("next") || "/";
+  const next = nextRaw.startsWith("/") ? nextRaw : "/";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -26,7 +29,7 @@ function LoginInner() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
+        credentials: "include",
         body: JSON.stringify({ username: u, wachtwoord }),
       });
 
@@ -40,6 +43,7 @@ function LoginInner() {
       }
 
       router.replace(next);
+      router.refresh();
     } catch (err) {
       console.error(err);
       setFout("Er ging iets mis bij het inloggen");
