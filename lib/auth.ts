@@ -1,26 +1,27 @@
-import { SignJWT, jwtVerify } from "jose";
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession, cookieName, type Rol } from "@/lib/auth";
 
-export type Rol = "eigenaar" | "docent" | "gast" | "lid";
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get(cookieName)?.value;
 
-const COOKIE_NAME = "tda_session";
+  if (!token) {
+    return NextResponse.json({ loggedIn: false }, { status: 200 });
+  }
 
-const secret = process.env.AUTH_SECRET;
-if (!secret) {
-  throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel)");
-}
-const key = new TextEncoder().encode(secret);
+  try {
+    const session = await verifySession(token);
 
-export const cookieName = COOKIE_NAME;
+    const rol: Rol =
+      (session.rol as Rol | undefined) ?? ("lid" as Rol);
 
-export async function signSession(payload: { rol: Rol }) {
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(key);
-}
-
-export async function verifySession(token: string) {
-  const { payload } = await jwtVerify(token, key);
-  return payload as { rol?: Rol };
+    return NextResponse.json(
+      { loggedIn: true, rol },
+      { status: 200 }
+    );
+  } catch {
+    // Cookie ongeldig -> als "uitgelogd" behandelen
+    const res = NextResponse.json({ loggedIn: false }, { status: 200 });
+    res.cookies.set(cookieName, "", { path: "/", maxAge: 0 });
+    return res;
+  }
 }
