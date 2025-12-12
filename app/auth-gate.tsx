@@ -1,39 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const PUBLIC_PATHS = ["/login"];
 
-export function AuthGate({ children }: { children: React.ReactNode }) {
+type SessionResponse = {
+  loggedIn?: boolean;
+  rol?: "eigenaar" | "docent" | "gast" | "lid";
+};
+
+export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [allowed, setAllowed] = useState(false);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // /login is altijd openbaar
-    if (PUBLIC_PATHS.includes(pathname)) {
-      setAllowed(true);
-      setChecking(false);
-      return;
+    let cancelled = false;
+
+    async function checkSession() {
+      // Publieke pagina’s altijd toestaan
+      if (PUBLIC_PATHS.includes(pathname)) {
+        setAllowed(true);
+        setChecking(false);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/session", { cache: "no-store" });
+
+        if (!res.ok) {
+          if (!cancelled) router.replace("/login");
+          return;
+        }
+
+        const data = (await res.json()) as SessionResponse;
+
+        if (data.loggedIn) {
+          if (!cancelled) setAllowed(true);
+        } else {
+          if (!cancelled) router.replace("/login");
+        }
+      } catch {
+        if (!cancelled) router.replace("/login");
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
     }
 
-    // Alleen in de browser hebben we localStorage
-    if (typeof window === "undefined") {
-      return;
-    }
+    checkSession();
 
-    const ingelogd = localStorage.getItem("tda_ingelogd");
-
-    if (ingelogd === "ja") {
-      setAllowed(true);
-    } else {
-      // niet ingelogd → doorsturen naar /login
-      router.replace("/login");
-    }
-
-    setChecking(false);
+    return () => {
+      cancelled = true;
+    };
   }, [pathname, router]);
 
   if (checking) {
