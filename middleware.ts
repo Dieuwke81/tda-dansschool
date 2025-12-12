@@ -1,60 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ... } from "@/lib/auth";
+import { verifySession, cookieName, type Rol } from "@/lib/auth";
 
 function isAllowed(pathname: string, rol: Rol) {
-  // Alleen eigenaar/docent mogen naar leden/lessen
-  if (pathname.startsWith("/leden") || pathname.startsWith("/lessen")) {
+  // Alleen eigenaar en docent mogen naar deze routes
+  if (pathname.startsWith("/leden")) {
     return rol === "eigenaar" || rol === "docent";
   }
+
+  // Alles anders is toegestaan
   return true;
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Niet blokkeren: Next assets, api, login, bestanden
+  // Login-pagina en api mogen altijd
   if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    pathname === "/login" ||
-    pathname.startsWith("/favicon") ||
-    pathname.startsWith("/manifest") ||
-    pathname.startsWith("/android-chrome") ||
-    pathname.startsWith("/apple-touch-icon") ||
-    pathname.startsWith("/og-image") ||
-    pathname.startsWith("/robots.txt") ||
-    pathname.startsWith("/sitemap.xml")
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/api")
   ) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get(cookieName())?.value;
+  const token = req.cookies.get(cookieName)?.value;
 
-  // Geen cookie → naar login
+  // Niet ingelogd → naar login
   if (!token) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
   try {
-    const payload = await verifySession(token);
-    const rol = (payload.rol ?? "gast") as Rol;
+    const session = await verifySession(token);
+    const rol = session.rol ?? "gast";
 
     if (!isAllowed(pathname, rol)) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return NextResponse.redirect(new URL("/", req.url));
     }
 
     return NextResponse.next();
   } catch {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    // Ongeldige token → uitloggen
+    const res = NextResponse.redirect(new URL("/login", req.url));
+    res.cookies.set(cookieName, "", { path: "/", maxAge: 0 });
+    return res;
   }
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
