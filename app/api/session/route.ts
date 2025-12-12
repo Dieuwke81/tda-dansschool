@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession, cookieName, type Rol } from "@/lib/auth";
+import { verifySession, cookieName } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(cookieName)?.value;
@@ -10,16 +10,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const session = await verifySession(token);
-
-    const rol: Rol =
-      (session.rol as Rol | undefined) ?? ("lid" as Rol);
-
     return NextResponse.json(
-      { loggedIn: true, rol },
+      { loggedIn: true, rol: session.rol ?? "gast", username: session.username },
       { status: 200 }
     );
   } catch {
-    // Cookie ongeldig -> als "uitgelogd" behandelen
     const res = NextResponse.json({ loggedIn: false }, { status: 200 });
     res.cookies.set(cookieName, "", { path: "/", maxAge: 0 });
     return res;
