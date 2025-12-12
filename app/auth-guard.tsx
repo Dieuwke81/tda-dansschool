@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-type Rol = "eigenaar" | "docent" | "gast";
+type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
 type AuthGuardProps = {
-  children: React.ReactNode;
+  children: ReactNode;
   allowedRoles: Rol[];
 };
 
@@ -15,17 +15,38 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   const router = useRouter();
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    let cancelled = false;
 
-    const ingelogd = window.localStorage.getItem("ingelogd");
-    const rol = window.localStorage.getItem("rol") as Rol | null;
+    async function check() {
+      try {
+        // Server leest httpOnly cookie en geeft rol terug
+        const res = await fetch("/api/session", { cache: "no-store" });
 
-    // Niet ingelogd of rol niet toegestaan → terug naar /login
-    if (ingelogd !== "ja" || !rol || !allowedRoles.includes(rol)) {
-      router.push("/login");
-    } else {
-      setMagTonen(true);
+        if (!res.ok) {
+          if (!cancelled) router.replace("/login");
+          return;
+        }
+
+        const data = (await res.json()) as { loggedIn?: boolean; rol?: Rol };
+
+        const rol = data?.rol;
+        const loggedIn = data?.loggedIn === true;
+
+        if (!loggedIn || !rol || !allowedRoles.includes(rol)) {
+          if (!cancelled) router.replace("/login");
+          return;
+        }
+
+        if (!cancelled) setMagTonen(true);
+      } catch {
+        if (!cancelled) router.replace("/login");
+      }
     }
+
+    check();
+    return () => {
+      cancelled = true;
+    };
   }, [router, allowedRoles]);
 
   if (!magTonen) {
