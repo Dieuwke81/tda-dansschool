@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, cookieName, type Rol } from "@/lib/auth";
-
+ 
 export async function GET(req: NextRequest) {
   const sheetUrl = process.env.SHEET_URL;
 
