@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
@@ -10,35 +10,37 @@ export default function LoginPage() {
   const [wachtwoord, setWachtwoord] = useState("");
   const [fout, setFout] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFout(null);
     setLoading(true);
 
+    const u = username.trim();
+
     try {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, wachtwoord }),
+        credentials: "same-origin", // cookie meenemen/zetten
+        body: JSON.stringify({ username: u, wachtwoord }),
       });
 
-      const data = await res.json().catch(() => null);
+      const data = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string; rol?: Rol }
+        | null;
 
       if (!res.ok || !data?.success) {
         setFout(data?.error || "Onjuiste inloggegevens");
         return;
       }
 
-      // ✅ Tijdelijk (zolang AuthGuard/AuthGate nog localStorage gebruikt)
-      const rol: Rol = (data?.rol ?? "lid") as Rol;
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("ingelogd", "ja");
-        window.localStorage.setItem("rol", rol);
-      }
-
-      router.push("/");
+      // Cookie is gezet, middleware/session doen de rest
+      router.replace(next);
     } catch (err) {
       console.error(err);
       setFout("Er ging iets mis bij het inloggen");
@@ -64,6 +66,7 @@ export default function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded bg-black border border-zinc-600 p-2 text-white"
               autoComplete="username"
+              spellCheck={false}
             />
           </div>
 
