@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-
+ 
   let wachtwoord = "";
   let rol: Rol = "gast";
 
