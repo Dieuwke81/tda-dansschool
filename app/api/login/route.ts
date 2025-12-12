@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { signSession, cookieName } from "@/lib/auth";
+import { signSession, cookieName, type Rol } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const token = await signSession({ rol: "eigenaar" as any });
+    const token = await signSession({ rol: "eigenaar" as Rol });
     const res = NextResponse.json({ success: true, rol: "eigenaar" });
 
     res.cookies.set(cookieName, token, {
@@ -102,7 +102,10 @@ export async function POST(req: NextRequest) {
   const hash = clean(match[15]);
   if (!hash) {
     return NextResponse.json(
-      { success: false, error: "Voor dit account is nog geen wachtwoord ingesteld" },
+      {
+        success: false,
+        error: "Voor dit account is nog geen wachtwoord ingesteld",
+      },
       { status: 401 }
     );
   }
@@ -115,7 +118,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = await signSession({ rol: "lid" as any });
+  const token = await signSession({ rol: "lid" as Rol });
   const res = NextResponse.json({ success: true, rol: "lid" });
 
   res.cookies.set(cookieName, token, {
