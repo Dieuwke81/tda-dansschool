@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   /* ===============================
      1️⃣ Check: sessie-cookie
   =============================== */
-  const token = req.cookies.get(cookieName())?.value;
+  const token = req.cookies.get(cookieName)?.value;
 
   if (!token) {
     return NextResponse.json(
