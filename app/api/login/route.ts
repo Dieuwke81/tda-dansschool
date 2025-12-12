@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signSession, type Rol, cookieName } from "../../../../lib/auth";
+import { ... } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const correct = process.env.LOGIN_PASSWORD;
