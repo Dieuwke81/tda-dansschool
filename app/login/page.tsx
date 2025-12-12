@@ -1,23 +1,16 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Rol = "eigenaar" | "docent" | "gast";
+type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
 export default function LoginPage() {
+  const [username, setUsername] = useState("");
   const [wachtwoord, setWachtwoord] = useState("");
-  const [rol, setRol] = useState<Rol>("gast");
   const [fout, setFout] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-
-  // Alleen voor gemak: onthoud de laatst gekozen rol
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const bestaandeRol = window.localStorage.getItem("rol") as Rol | null;
-    if (bestaandeRol) setRol(bestaandeRol);
-  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,17 +21,18 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wachtwoord, rol }),
+        body: JSON.stringify({ username, wachtwoord }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (!res.ok || !data?.success) {
-        setFout("Onjuist wachtwoord");
+        setFout(data?.error || "Onjuiste inloggegevens");
         return;
       }
 
-      // ✅ Tijdelijk nodig omdat AuthGuard/AuthGate nog localStorage gebruikt
+      // ✅ Tijdelijk (zolang AuthGuard/AuthGate nog localStorage gebruikt)
+      const rol: Rol = (data?.rol ?? "lid") as Rol;
       if (typeof window !== "undefined") {
         window.localStorage.setItem("ingelogd", "ja");
         window.localStorage.setItem("rol", rol);
@@ -58,10 +52,21 @@ export default function LoginPage() {
       <div className="w-full max-w-sm bg-zinc-900 rounded-xl p-6 border border-zinc-700">
         <h1 className="text-xl font-bold text-pink-500 mb-4">Inloggen</h1>
         <p className="text-sm text-gray-300 mb-4">
-          Vul het wachtwoord in en kies je rol.
+          Log in met je gebruikersnaam en wachtwoord.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm mb-1">Gebruikersnaam</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full rounded bg-black border border-zinc-600 p-2 text-white"
+              autoComplete="username"
+            />
+          </div>
+
           <div>
             <label className="block text-sm mb-1">Wachtwoord</label>
             <input
@@ -71,19 +76,6 @@ export default function LoginPage() {
               className="w-full rounded bg-black border border-zinc-600 p-2 text-white"
               autoComplete="current-password"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm mb-1">Rol</label>
-            <select
-              value={rol}
-              onChange={(e) => setRol(e.target.value as Rol)}
-              className="w-full rounded bg-black border border-zinc-600 p-2 text-white"
-            >
-              <option value="eigenaar">Eigenaar</option>
-              <option value="docent">Docent</option>
-              <option value="gast">Gast</option>
-            </select>
           </div>
 
           {fout && <p className="text-red-400 text-sm">{fout}</p>}
