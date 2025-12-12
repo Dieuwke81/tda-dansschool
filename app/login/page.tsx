@@ -28,7 +28,6 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // ✅ stuur nu ook de rol mee (voor de server-cookie sessie)
         body: JSON.stringify({ wachtwoord, rol }),
       });
 
@@ -39,12 +38,12 @@ export default function LoginPage() {
         return;
       }
 
-      // ✅ rol onthouden mag (niet gevoelig)
+      // ✅ Tijdelijk nodig omdat AuthGuard/AuthGate nog localStorage gebruikt
       if (typeof window !== "undefined") {
+        window.localStorage.setItem("ingelogd", "ja");
         window.localStorage.setItem("rol", rol);
       }
 
-      // Cookie wordt server-side gezet, dus gewoon door naar home
       router.push("/");
     } catch (err) {
       console.error(err);
