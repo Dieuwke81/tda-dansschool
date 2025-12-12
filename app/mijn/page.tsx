@@ -10,16 +10,12 @@ type SessionData = {
 
 export default function MijnPagina() {
   const [loading, setLoading] = useState(true);
-  const [rol, setRol] = useState<SessionData["rol"]>(null);
 
   useEffect(() => {
     async function loadSession() {
       try {
-        const res = await fetch("/api/session", { cache: "no-store" });
-        const data = (await res.json()) as SessionData;
-        setRol(data.rol ?? null);
-      } catch {
-        setRol(null);
+        // Alleen om even “warm” te checken; AuthGuard doet de echte bescherming
+        await fetch("/api/session", { cache: "no-store" });
       } finally {
         setLoading(false);
       }
@@ -48,7 +44,6 @@ export default function MijnPagina() {
             Welkom! Op deze pagina zie je straks je eigen gegevens.
           </p>
 
-          {/* Placeholder – dit vullen we in de volgende stap */}
           <div className="space-y-3 text-sm">
             <div>
               <span className="text-gray-400">Naam:</span>{" "}
