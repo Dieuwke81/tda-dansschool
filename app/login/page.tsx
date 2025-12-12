@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
-export default function LoginPage() {
+function LoginInner() {
   const [username, setUsername] = useState("");
   const [wachtwoord, setWachtwoord] = useState("");
   const [fout, setFout] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin", // cookie meenemen/zetten
+        credentials: "same-origin",
         body: JSON.stringify({ username: u, wachtwoord }),
       });
 
@@ -39,7 +39,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Cookie is gezet, middleware/session doen de rest
       router.replace(next);
     } catch (err) {
       console.error(err);
@@ -93,5 +92,19 @@ export default function LoginPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-black text-white flex items-center justify-center">
+          <p className="text-gray-300">Bezig met laden…</p>
+        </main>
+      }
+    >
+      <LoginInner />
+    </Suspense>
   );
 }
