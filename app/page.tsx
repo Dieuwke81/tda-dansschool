@@ -4,25 +4,68 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+type Rol = "eigenaar" | "docent" | "gast" | "lid";
+
 export default function HomePage() {
   const router = useRouter();
-  const [rol, setRol] = useState<string | null>(null);
+  const [rol, setRol] = useState<Rol | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const isIngelogd = localStorage.getItem("ingelogd");
-    const opgeslagenRol = localStorage.getItem("rol");
+    let cancelled = false;
 
-    if (!isIngelogd) {
-      router.push("/login");
-    } else {
-      setRol(opgeslagenRol);
-      setIsCheckingAuth(false);
+    async function check() {
+      try {
+        const res = await fetch("/api/session", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || !data?.loggedIn) {
+          if (!cancelled) router.replace("/login");
+          return;
+        }
+
+        const r: Rol = (data?.rol ?? "gast") as Rol;
+
+        // ✅ Lid gaat meteen naar eigen pagina
+        if (r === "lid") {
+          if (!cancelled) router.replace("/mijn");
+          return;
+        }
+
+        if (!cancelled) {
+          setRol(r);
+          setIsCheckingAuth(false);
+        }
+      } catch {
+        if (!cancelled) router.replace("/login");
+      }
     }
+
+    check();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
+  async function uitloggen() {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // negeren
+    }
+
+    // legacy opruimen (als er nog iets staat)
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("ingelogd");
+      localStorage.removeItem("rol");
+      localStorage.removeItem("tda_ingelogd");
+    }
+
+    router.replace("/login");
+  }
+
   if (isCheckingAuth) {
-    // Optioneel: simpeler "loading" scherm tijdens auth-check
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
         <p className="text-gray-400">Bezig met controleren...</p>
@@ -30,55 +73,45 @@ export default function HomePage() {
     );
   }
 
-  function uitloggen() {
-    localStorage.removeItem("ingelogd");
-    localStorage.removeItem("rol");
-    router.push("/login");
-  }
+  const isAdmin = rol === "eigenaar" || rol === "docent";
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
-      <img
-        src="/logo.png"
-        alt="TDA Logo"
-        className="w-52 mb-6"
-      />
+      <img src="/logo.png" alt="TDA Logo" className="w-52 mb-6" />
 
-      <h1 className="text-3xl font-bold text-pink-500 mb-2">
-        TDA Dansschool
-      </h1>
+      <h1 className="text-3xl font-bold text-pink-500 mb-2">TDA Dansschool</h1>
 
-      <p className="text-gray-300 mb-6">
-        Beheeromgeving voor leden en lesgroepen
-      </p>
+      <p className="text-gray-300 mb-6">Beheeromgeving voor leden en lesgroepen</p>
 
       {rol && (
         <p className="mb-4 text-sm text-gray-400">
-          Ingelogd als:{" "}
-          <span className="text-pink-400 font-semibold">{rol}</span>
+          Ingelogd als: <span className="text-pink-400 font-semibold">{rol}</span>
         </p>
       )}
 
-      <div className="flex gap-4 mb-6">
-        <Link
-          href="/leden"
-          className="bg-pink-500 text-black font-semibold px-6 py-3 rounded-full"
-        >
-          Leden
-        </Link>
+      {isAdmin ? (
+        <div className="flex gap-4 mb-6">
+          <Link
+            href="/leden"
+            className="bg-pink-500 text-black font-semibold px-6 py-3 rounded-full"
+          >
+            Leden
+          </Link>
 
-        <Link
-          href="/lessen"
-          className="border border-pink-500 text-pink-500 font-semibold px-6 py-3 rounded-full"
-        >
-          Lesgroepen
-        </Link>
-      </div>
+          <Link
+            href="/lessen"
+            className="border border-pink-500 text-pink-500 font-semibold px-6 py-3 rounded-full"
+          >
+            Lesgroepen
+          </Link>
+        </div>
+      ) : (
+        <p className="text-gray-400 mb-6 text-sm">
+          Je hebt geen beheerrechten op deze startpagina.
+        </p>
+      )}
 
-      <button
-        onClick={uitloggen}
-        className="text-gray-400 underline text-sm"
-      >
+      <button onClick={uitloggen} className="text-gray-400 underline text-sm">
         Uitloggen
       </button>
     </main>
