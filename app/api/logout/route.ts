@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookieName } from "../../../../lib/auth";
+import { ... } from "@/lib/auth";
 
 export async function POST() {
   const res = NextResponse.json({ success: true });
