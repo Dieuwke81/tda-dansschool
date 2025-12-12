@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   // 1) Alleen eigenaar mag hashes maken
-  const token = req.cookies.get(cookieName)?.value;
+  const token = req.cookies.get(cookieName())?.value;
   if (!token) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
