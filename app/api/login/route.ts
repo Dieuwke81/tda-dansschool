@@ -1,6 +1,7 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { signSession, cookieName, type Rol } from "@/lib/auth";
+import { signSession, cookieName } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,7 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
-// mini CSV parser (werkt ook met komma’s in quotes)
+// simpele CSV line parser (kan quotes aan)
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -18,6 +19,7 @@ function parseCsvLine(line: string): string[] {
     const ch = line[i];
 
     if (ch === '"') {
+      // dubbele quote binnen quotes => escaped quote
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
@@ -37,7 +39,7 @@ function parseCsvLine(line: string): string[] {
   }
 
   out.push(cur);
-  return out.map((x) => x.trim());
+  return out.map((v) => v.trim());
 }
 
 export async function POST(req: NextRequest) {
@@ -75,10 +77,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rol: Rol = "eigenaar";
-    const token = await signSession({ rol });
+    const token = await signSession({ rol: "eigenaar", username });
+    const res = NextResponse.json({ success: true, rol: "eigenaar" });
 
-    const res = NextResponse.json({ success: true, rol });
     res.cookies.set(cookieName, token, {
       httpOnly: true,
       secure: true,
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
+
     return res;
   }
 
@@ -115,11 +117,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const lines = csv.split("\n").map((l) => l.replace(/\r/g, "")).filter(Boolean);
+  const lines = csv.trim().split("\n");
   const [, ...rows] = lines; // header overslaan
 
   // A..N = 0..13, O=username=14, P=password_hash=15
   const match = rows
+    .filter((l) => l.trim().length > 0)
     .map(parseCsvLine)
     .find((c) => clean(c[14]) === username);
 
@@ -133,7 +136,10 @@ export async function POST(req: NextRequest) {
   const hash = clean(match[15]);
   if (!hash) {
     return NextResponse.json(
-      { success: false, error: "Voor dit account is nog geen wachtwoord ingesteld" },
+      {
+        success: false,
+        error: "Voor dit account is nog geen wachtwoord ingesteld",
+      },
       { status: 401 }
     );
   }
@@ -146,10 +152,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const rol: Rol = "lid";
-  const token = await signSession({ rol, username });
+  // ✅ rol = lid + username in de session
+  const token = await signSession({ rol: "lid", username });
+  const res = NextResponse.json({ success: true, rol: "lid" });
 
-  const res = NextResponse.json({ success: true, rol });
   res.cookies.set(cookieName, token, {
     httpOnly: true,
     secure: true,
