@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signSession, type Rol, getCookieName } from "@/lib/auth";
+import { signSession, type Rol, cookieName } from "../../../lib/auth";
 
 export async function POST(req: NextRequest) {
   const correct = process.env.LOGIN_PASSWORD;
+
   if (!correct) {
     return NextResponse.json(
       { success: false, error: "LOGIN_PASSWORD ontbreekt op de server" },
@@ -41,12 +42,13 @@ export async function POST(req: NextRequest) {
   const token = await signSession({ rol });
 
   const res = NextResponse.json({ success: true });
-  res.cookies.set(getCookieName(), token, {
+  res.cookies.set(cookieName(), token, {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 7 dagen
+    maxAge: 60 * 60 * 24 * 7
   });
+
   return res;
 }
