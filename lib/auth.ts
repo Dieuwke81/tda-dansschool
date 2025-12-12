@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 export type Rol = "eigenaar" | "docent" | "gast";
 
 const COOKIE_NAME = "tda_session";
-
+ 
 const secret = process.env.AUTH_SECRET;
 if (!secret) {
   throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel)");
