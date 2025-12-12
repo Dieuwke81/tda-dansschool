@@ -8,6 +8,38 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
+// mini CSV parser (werkt ook met komma’s in quotes)
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === "," && !inQuotes) {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+
+    cur += ch;
+  }
+
+  out.push(cur);
+  return out.map((x) => x.trim());
+}
+
 export async function POST(req: NextRequest) {
   // 0) Lees body: username + wachtwoord
   let username = "";
@@ -43,9 +75,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const token = await signSession({ rol: "eigenaar" as Rol });
-    const res = NextResponse.json({ success: true, rol: "eigenaar" });
+    const rol: Rol = "eigenaar";
+    const token = await signSession({ rol });
 
+    const res = NextResponse.json({ success: true, rol });
     res.cookies.set(cookieName, token, {
       httpOnly: true,
       secure: true,
@@ -53,7 +86,6 @@ export async function POST(req: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
-
     return res;
   }
 
@@ -83,13 +115,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const lines = csv.trim().split("\n");
+  const lines = csv.split("\n").map((l) => l.replace(/\r/g, "")).filter(Boolean);
   const [, ...rows] = lines; // header overslaan
 
   // A..N = 0..13, O=username=14, P=password_hash=15
   const match = rows
-    .filter((l) => l.trim().length > 0)
-    .map((l) => l.split(","))
+    .map(parseCsvLine)
     .find((c) => clean(c[14]) === username);
 
   if (!match) {
@@ -102,10 +133,7 @@ export async function POST(req: NextRequest) {
   const hash = clean(match[15]);
   if (!hash) {
     return NextResponse.json(
-      {
-        success: false,
-        error: "Voor dit account is nog geen wachtwoord ingesteld",
-      },
+      { success: false, error: "Voor dit account is nog geen wachtwoord ingesteld" },
       { status: 401 }
     );
   }
@@ -118,9 +146,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = await signSession({ rol: "lid" as Rol });
-  const res = NextResponse.json({ success: true, rol: "lid" });
+  const rol: Rol = "lid";
+  const token = await signSession({ rol, username });
 
+  const res = NextResponse.json({ success: true, rol });
   res.cookies.set(cookieName, token, {
     httpOnly: true,
     secure: true,
