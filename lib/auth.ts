@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 
 export type Rol = "eigenaar" | "docent" | "gast";
 
-const COOKIE_NAME = "tda_session";
+export const cookieName = "tda_session";
 
 function getSecretKey() {
   const secret = process.env.AUTH_SECRET;
@@ -10,10 +10,6 @@ function getSecretKey() {
     throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel Environment Variables)");
   }
   return new TextEncoder().encode(secret);
-}
-
-export function cookieName() {
-  return COOKIE_NAME;
 }
 
 export async function signSession(payload: { rol: Rol }) {
