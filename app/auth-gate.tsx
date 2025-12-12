@@ -18,8 +18,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function checkSession() {
+      // reset bij elke route change
+      setAllowed(false);
+      setChecking(true);
+
       // Publieke pagina’s altijd toestaan
       if (PUBLIC_PATHS.includes(pathname)) {
         setAllowed(true);
@@ -28,7 +33,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
       }
 
       try {
-        const res = await fetch("/api/session", { cache: "no-store" });
+        const res = await fetch("/api/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal,
+        });
 
         if (!res.ok) {
           if (!cancelled) router.replace("/login");
@@ -53,6 +62,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [pathname, router]);
 
@@ -64,9 +74,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!allowed) {
-    return null;
-  }
+  if (!allowed) return null;
 
   return <>{children}</>;
 }
