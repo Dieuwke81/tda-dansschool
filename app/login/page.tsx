@@ -12,13 +12,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // Als er al een rol in localStorage staat, kies die standaard in de dropdown
+  // Alleen voor gemak: onthoud de laatst gekozen rol
   useEffect(() => {
     if (typeof window === "undefined") return;
     const bestaandeRol = window.localStorage.getItem("rol") as Rol | null;
-    if (bestaandeRol) {
-      setRol(bestaandeRol);
-    }
+    if (bestaandeRol) setRol(bestaandeRol);
   }, []);
 
   async function handleSubmit(e: FormEvent) {
@@ -29,25 +27,24 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ wachtwoord }),
+        headers: { "Content-Type": "application/json" },
+        // ✅ stuur nu ook de rol mee (voor de server-cookie sessie)
+        body: JSON.stringify({ wachtwoord, rol }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (!res.ok || !data.success) {
+      if (!res.ok || !data?.success) {
         setFout("Onjuist wachtwoord");
         return;
       }
 
-      // Succesvol ingelogd
+      // ✅ rol onthouden mag (niet gevoelig)
       if (typeof window !== "undefined") {
-        window.localStorage.setItem("ingelogd", "ja");
         window.localStorage.setItem("rol", rol);
       }
 
+      // Cookie wordt server-side gezet, dus gewoon door naar home
       router.push("/");
     } catch (err) {
       console.error(err);
@@ -73,6 +70,7 @@ export default function LoginPage() {
               value={wachtwoord}
               onChange={(e) => setWachtwoord(e.target.value)}
               className="w-full rounded bg-black border border-zinc-600 p-2 text-white"
+              autoComplete="current-password"
             />
           </div>
 
