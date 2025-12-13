@@ -1,19 +1,19 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import AuthGuard from "@/components/AuthGuard"; // pas pad aan als jouw AuthGuard elders staat
+
+type SessionResponse = {
+  loggedIn?: boolean;
+  rol?: "eigenaar" | "docent" | "gast" | "lid";
+  mustChangePassword?: boolean;
+};
 
 export default function WachtwoordPage() {
-  return (
-    <AuthGuard allowedRoles={["lid"]}>
-      <Inner />
-    </AuthGuard>
-  );
-}
-
-function Inner() {
   const router = useRouter();
+
+  const [checking, setChecking] = useState(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -21,12 +21,45 @@ function Inner() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function check() {
+      try {
+        const res = await fetch("/api/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+
+        const data = (await res.json().catch(() => null)) as SessionResponse | null;
+
+        if (!res.ok || !data?.loggedIn || data?.rol !== "lid") {
+          router.replace("/login");
+          return;
+        }
+
+        // Als mustChangePassword al false is -> terug naar /mijn
+        if (data.mustChangePassword !== true) {
+          router.replace("/mijn");
+          return;
+        }
+
+        if (!cancelled) setChecking(false);
+      } catch {
+        router.replace("/login");
+      }
+    }
+
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
     setLoading(true);
 
     try {
@@ -45,15 +78,20 @@ function Inner() {
         return;
       }
 
-      setSuccess(true);
       setLoading(false);
-
-      // na succes: naar /mijn
       router.replace("/mijn");
     } catch {
       setError("Kon wachtwoord niet wijzigen");
       setLoading(false);
     }
+  }
+
+  if (checking) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-gray-300">Even controleren…</p>
+      </main>
+    );
   }
 
   return (
@@ -64,17 +102,7 @@ function Inner() {
           Dit is je eerste keer inloggen. Kies nu een nieuw wachtwoord.
         </p>
 
-        {error && (
-          <div className="mb-4 text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-4 text-sm text-green-400">
-            Gelukt! Je wordt doorgestuurd…
-          </div>
-        )}
+        {error && <div className="mb-4 text-sm text-red-400">{error}</div>}
 
         <form onSubmit={submit} className="space-y-4">
           <div>
