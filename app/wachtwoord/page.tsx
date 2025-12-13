@@ -12,16 +12,9 @@ export default function WachtwoordPage() {
     </AuthGuard>
   );
 }
-type SessionResponse = {
-  loggedIn?: boolean;
-  rol?: "eigenaar" | "docent" | "gast" | "lid";
-  mustChangePassword?: boolean;
-};
 
-export default function WachtwoordPage() {
+function Inner() {
   const router = useRouter();
-
-  const [checking, setChecking] = useState(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -29,41 +22,6 @@ export default function WachtwoordPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function check() {
-      try {
-        const res = await fetch("/api/session", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
-
-        const data = (await res.json().catch(() => null)) as SessionResponse | null;
-
-        if (!res.ok || !data?.loggedIn || data?.rol !== "lid") {
-          router.replace("/login");
-          return;
-        }
-
-        // Als mustChangePassword al false is -> terug naar /mijn
-        if (data.mustChangePassword !== true) {
-          router.replace("/mijn");
-          return;
-        }
-
-        if (!cancelled) setChecking(false);
-      } catch {
-        router.replace("/login");
-      }
-    }
-
-    check();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,14 +50,6 @@ export default function WachtwoordPage() {
       setError("Kon wachtwoord niet wijzigen");
       setLoading(false);
     }
-  }
-
-  if (checking) {
-    return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-gray-300">Even controleren…</p>
-      </main>
-    );
   }
 
   return (
