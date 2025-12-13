@@ -81,14 +81,14 @@ export async function POST(req: NextRequest) {
   const owner = owners.find((o) => o.u === username);
 
   if (owner) {
-    if (wachtwoord !== owner.p) {
+    const ok = await bcrypt.compare(wachtwoord, owner.p);
+    if (!ok) {
       return NextResponse.json(
         { success: false, error: "Onjuiste inloggegevens" },
         { status: 401 }
       );
     }
 
-    // ✅ username mee in sessie
     const token = await signSession({ rol: "eigenaar", username });
     const res = NextResponse.json({ success: true, rol: "eigenaar" });
 
@@ -127,8 +127,8 @@ export async function POST(req: NextRequest) {
   const [, ...rows] = lines;
 
   const row = rows
-    .map(parseCsvLine) // ✅ i.p.v. split(",") (belangrijk bij komma’s in velden)
-    .find((c) => clean(c[14]) === username); // kolom O = 14
+    .map(parseCsvLine)
+    .find((c) => clean(c[14]) === username);
 
   if (!row) {
     return NextResponse.json(
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const hash = clean(row[15]); // kolom P = 15
+  const hash = clean(row[15]);
   if (!hash) {
     return NextResponse.json(
       { success: false, error: "Nog geen wachtwoord ingesteld" },
@@ -153,7 +153,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ✅ username mee in sessie
   const token = await signSession({ rol: "lid", username });
   const res = NextResponse.json({ success: true, rol: "lid" });
 
