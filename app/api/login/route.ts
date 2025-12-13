@@ -8,7 +8,7 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
-type Owner = { u: string; p: string };
+type Owner = { u: string; p: string ;
 
 function parseOwners(env?: string): Owner[] {
   if (!env) return [];
