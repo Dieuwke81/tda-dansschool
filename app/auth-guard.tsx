@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
@@ -13,22 +14,22 @@ type AuthGuardProps = {
 type SessionResponse = {
   loggedIn?: boolean;
   rol?: Rol;
+  mustChangePassword?: boolean;
 };
 
 export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   const [magTonen, setMagTonen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
 
     async function check() {
-      // reset bij (re)mount / change roles
       setMagTonen(false);
 
       try {
-        // Server leest httpOnly cookie en geeft rol terug
         const res = await fetch("/api/session", {
           cache: "no-store",
           credentials: "same-origin",
@@ -50,6 +51,12 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
           return;
         }
 
+        // ✅ Force password change voor leden (behalve op /wachtwoord zelf)
+        if (rol === "lid" && data?.mustChangePassword === true && pathname !== "/wachtwoord") {
+          if (!cancelled) router.replace("/wachtwoord");
+          return;
+        }
+
         if (!cancelled) setMagTonen(true);
       } catch {
         if (!cancelled) router.replace("/login");
@@ -62,7 +69,7 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
       cancelled = true;
       controller.abort();
     };
-  }, [router, allowedRoles]);
+  }, [router, allowedRoles, pathname]);
 
   if (!magTonen) {
     return (
