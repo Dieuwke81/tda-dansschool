@@ -1,9 +1,17 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AuthGuard from "../auth-guard";
 
+export default function WachtwoordPage() {
+  return (
+    <AuthGuard allowedRoles={["lid"]}>
+      <Inner />
+    </AuthGuard>
+  );
+}
 type SessionResponse = {
   loggedIn?: boolean;
   rol?: "eigenaar" | "docent" | "gast" | "lid";
