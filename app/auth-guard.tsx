@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
@@ -20,11 +20,9 @@ type SessionResponse = {
 export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   const [magTonen, setMagTonen] = useState(false);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
 
     async function check() {
       setMagTonen(false);
@@ -33,48 +31,42 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
         const res = await fetch("/api/session", {
           cache: "no-store",
           credentials: "same-origin",
-          signal: controller.signal,
         });
 
         if (!res.ok) {
-          if (!cancelled) router.replace("/login");
+          router.replace("/login");
           return;
         }
 
         const data = (await res.json()) as SessionResponse;
 
-        const rol = data?.rol;
-        const loggedIn = data?.loggedIn === true;
-
-        if (!loggedIn || !rol || !allowedRoles.includes(rol)) {
-          if (!cancelled) router.replace("/login");
+        if (!data.loggedIn || !data.rol || !allowedRoles.includes(data.rol)) {
+          router.replace("/login");
           return;
         }
 
-        // ✅ Force password change voor leden (behalve op /wachtwoord zelf)
-        if (rol === "lid" && data?.mustChangePassword === true && pathname !== "/wachtwoord") {
-          if (!cancelled) router.replace("/wachtwoord");
+        // 🔥 DIT IS DE MISSENDE SCHAKEL
+        if (data.rol === "lid" && data.mustChangePassword === true) {
+          router.replace("/wachtwoord");
           return;
         }
 
         if (!cancelled) setMagTonen(true);
       } catch {
-        if (!cancelled) router.replace("/login");
+        router.replace("/login");
       }
     }
 
     check();
-
     return () => {
       cancelled = true;
-      controller.abort();
     };
-  }, [router, allowedRoles, pathname]);
+  }, [router, allowedRoles]);
 
   if (!magTonen) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-gray-300">Even inloggen…</p>
+        <p className="text-gray-300">Even controleren…</p>
       </main>
     );
   }
