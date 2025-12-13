@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { signSession, cookieName } from "@/lib/auth";
@@ -8,7 +9,7 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
-type Owner = { u: string; p: string ;
+type Owner = { u: string; p: string };
 
 function parseOwners(env?: string): Owner[] {
   if (!env) return [];
