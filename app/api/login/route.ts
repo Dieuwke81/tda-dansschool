@@ -20,7 +20,7 @@ function parseOwners(env?: string): Owner[] {
     .map(([u, p]) => ({ u: u.trim(), p: p.trim() }));
 }
 
-// simpele CSV parser (werkt ook met komma’s in quotes)
+// CSV parser (werkt ook met komma’s in quotes)
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -52,6 +52,11 @@ function parseCsvLine(line: string): string[] {
   return out;
 }
 
+function isJa(v: string) {
+  const x = clean(v).toLowerCase();
+  return x === "ja" || x === "true" || x === "1" || x === "yes";
+}
+
 export async function POST(req: NextRequest) {
   let username = "";
   let wachtwoord = "";
@@ -61,10 +66,7 @@ export async function POST(req: NextRequest) {
     username = clean(body?.username);
     wachtwoord = String(body?.wachtwoord ?? "");
   } catch {
-    return NextResponse.json(
-      { success: false, error: "Ongeldige invoer" },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, error: "Ongeldige invoer" }, { status: 400 });
   }
 
   if (!username || !wachtwoord) {
@@ -83,15 +85,16 @@ export async function POST(req: NextRequest) {
   if (owner) {
     const ok = await bcrypt.compare(wachtwoord, owner.p);
     if (!ok) {
-      return NextResponse.json(
-        { success: false, error: "Onjuiste inloggegevens" },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
     }
 
-    const token = await signSession({ rol: "eigenaar", username });
-    const res = NextResponse.json({ success: true, rol: "eigenaar" });
+    const token = await signSession({
+      rol: "eigenaar",
+      username,
+      mustChangePassword: false,
+    });
 
+    const res = NextResponse.json({ success: true, rol: "eigenaar" });
     res.cookies.set(cookieName, token, {
       httpOnly: true,
       secure: true,
@@ -99,7 +102,6 @@ export async function POST(req: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
-
     return res;
   }
 
@@ -108,53 +110,46 @@ export async function POST(req: NextRequest) {
   // ===========
   const sheetUrl = process.env.SHEET_URL;
   if (!sheetUrl) {
-    return NextResponse.json(
-      { success: false, error: "SHEET_URL ontbreekt" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "SHEET_URL ontbreekt" }, { status: 500 });
   }
 
   const r = await fetch(sheetUrl, { cache: "no-store" });
   if (!r.ok) {
-    return NextResponse.json(
-      { success: false, error: "Kon sheet niet ophalen" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Kon sheet niet ophalen" }, { status: 500 });
   }
 
   const csv = await r.text();
   const lines = csv.trim().split("\n");
   const [, ...rows] = lines;
 
-  const row = rows
-    .map(parseCsvLine)
-    .find((c) => clean(c[14]) === username);
-
+  const row = rows.map(parseCsvLine).find((c) => clean(c[14]) === username); // O
   if (!row) {
-    return NextResponse.json(
-      { success: false, error: "Onjuiste inloggegevens" },
-      { status: 401 }
-    );
+    return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
   }
 
-  const hash = clean(row[15]);
+  const hash = clean(row[15]); // P
   if (!hash) {
-    return NextResponse.json(
-      { success: false, error: "Nog geen wachtwoord ingesteld" },
-      { status: 403 }
-    );
+    return NextResponse.json({ success: false, error: "Nog geen wachtwoord ingesteld" }, { status: 403 });
   }
 
   const ok = await bcrypt.compare(wachtwoord, hash);
   if (!ok) {
-    return NextResponse.json(
-      { success: false, error: "Onjuiste inloggegevens" },
-      { status: 401 }
-    );
+    return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
   }
 
-  const token = await signSession({ rol: "lid", username });
-  const res = NextResponse.json({ success: true, rol: "lid" });
+  const mustChangePassword = isJa(row[16]); // Q
+
+  const token = await signSession({
+    rol: "lid",
+    username,
+    mustChangePassword,
+  });
+
+  const res = NextResponse.json({
+    success: true,
+    rol: "lid",
+    mustChangePassword,
+  });
 
   res.cookies.set(cookieName, token, {
     httpOnly: true,
