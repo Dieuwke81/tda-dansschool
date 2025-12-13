@@ -54,19 +54,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Ongeldige sessie" }, { status: 401 });
   }
 
+  // Username is verplicht (jij wil niet op email vallen)
+  // -> 401 zodat de client doorstuurt naar /login
   if (!username) {
     return NextResponse.json(
       { error: "Gebruiker ontbreekt in sessie" },
-      { status: 400 }
+      { status: 401 }
     );
   }
 
   const sheetUrl = process.env.SHEET_URL;
   if (!sheetUrl) {
-    return NextResponse.json(
-      { error: "SHEET_URL ontbreekt" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "SHEET_URL ontbreekt" }, { status: 500 });
   }
 
   let csv = "";
@@ -104,10 +103,7 @@ export async function GET(req: NextRequest) {
     .find((c) => clean(c[14]) === username);
 
   if (!row) {
-    return NextResponse.json(
-      { error: "Account niet gevonden" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Account niet gevonden" }, { status: 404 });
   }
 
   return NextResponse.json({
@@ -116,7 +112,7 @@ export async function GET(req: NextRequest) {
     les: row[3],
     tweedeLes: row[4],
     soort: row[5],
-    toestemmingBeeld: row[6],
+    toestemmingBeeldmateriaal: row[6], // ✅ keynaam matcht jouw UI
     telefoon1: row[7],
     telefoon2: row[8],
     geboortedatum: row[9],
