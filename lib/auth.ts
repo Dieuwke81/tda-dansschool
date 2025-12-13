@@ -15,6 +15,9 @@ const key = new TextEncoder().encode(secret);
 export type SessionPayload = {
   rol: Rol;
   username?: string; // ✅ nodig voor /mijn
+
+  // ✅ nieuw: bij eerste login verplicht wijzigen
+  mustChangePassword?: boolean;
 };
 
 export async function signSession(payload: SessionPayload) {
