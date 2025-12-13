@@ -20,6 +20,38 @@ function parseOwners(env?: string): Owner[] {
     .map(([u, p]) => ({ u: u.trim(), p: p.trim() }));
 }
 
+// simpele CSV parser (werkt ook met komma’s in quotes)
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === "," && !inQuotes) {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+
+    cur += ch;
+  }
+
+  out.push(cur.trim());
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   let username = "";
   let wachtwoord = "";
@@ -56,7 +88,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const token = await signSession({ rol: "eigenaar" });
+    // ✅ username mee in sessie
+    const token = await signSession({ rol: "eigenaar", username });
     const res = NextResponse.json({ success: true, rol: "eigenaar" });
 
     res.cookies.set(cookieName, token, {
@@ -94,8 +127,8 @@ export async function POST(req: NextRequest) {
   const [, ...rows] = lines;
 
   const row = rows
-    .map((l) => l.split(","))
-    .find((c) => clean(c[14]) === username); // kolom O
+    .map(parseCsvLine) // ✅ i.p.v. split(",") (belangrijk bij komma’s in velden)
+    .find((c) => clean(c[14]) === username); // kolom O = 14
 
   if (!row) {
     return NextResponse.json(
@@ -104,7 +137,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const hash = clean(row[15]); // kolom P
+  const hash = clean(row[15]); // kolom P = 15
   if (!hash) {
     return NextResponse.json(
       { success: false, error: "Nog geen wachtwoord ingesteld" },
@@ -120,7 +153,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = await signSession({ rol: "lid" });
+  // ✅ username mee in sessie
+  const token = await signSession({ rol: "lid", username });
   const res = NextResponse.json({ success: true, rol: "lid" });
 
   res.cookies.set(cookieName, token, {
