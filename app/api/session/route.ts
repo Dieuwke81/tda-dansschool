@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, cookieName } from "@/lib/auth";
 
@@ -10,8 +11,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const session = await verifySession(token);
+
     return NextResponse.json(
-      { loggedIn: true, rol: session.rol ?? "gast", username: session.username },
+      {
+        loggedIn: true,
+        rol: session.rol ?? "gast",
+        username: session.username,
+        mustChangePassword: session.mustChangePassword === true,
+      },
       { status: 200 }
     );
   } catch {
