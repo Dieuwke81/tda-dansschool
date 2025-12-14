@@ -4,11 +4,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const PUBLIC_PATHS = ["/login"]; // eventueel later uitbreiden
+const PUBLIC_PATHS = ["/login"]; // voeg evt "/hash" etc toe als dat publiek moet zijn
+
+type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
 type SessionResponse = {
   loggedIn?: boolean;
-  rol?: "eigenaar" | "docent" | "gast" | "lid";
+  rol?: Rol;
   username?: string;
   mustChangePassword?: boolean;
 };
@@ -24,9 +26,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
     let cancelled = false;
     const controller = new AbortController();
 
+    function stopAndRedirect(to: string) {
+      // voorkom "eeuwig" blijven hangen
+      if (!cancelled) {
+        setAllowed(false);
+        setChecking(false);
+        router.replace(to);
+      }
+    }
+
     async function checkSession() {
-      setAllowed(false);
-      setChecking(true);
+      // reset bij elke route change
+      if (!cancelled) {
+        setAllowed(false);
+        setChecking(true);
+      }
 
       // Publieke routes altijd toestaan
       if (PUBLIC_PATHS.includes(pathname)) {
@@ -40,19 +54,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
       try {
         const res = await fetch("/api/session", {
           cache: "no-store",
-          credentials: "same-origin",
+          credentials: "include",
           signal: controller.signal,
         });
 
         if (!res.ok) {
-          if (!cancelled) router.replace("/login");
+          stopAndRedirect("/login");
           return;
         }
 
-        const data = (await res.json()) as SessionResponse;
+        const data = (await res.json().catch(() => null)) as SessionResponse | null;
 
-        if (!data?.loggedIn) {
-          if (!cancelled) router.replace("/login");
+        if (!data?.loggedIn || !data?.rol) {
+          stopAndRedirect("/login");
           return;
         }
 
@@ -61,20 +75,25 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
         // 1) Lid moet wachtwoord wijzigen -> force naar /wachtwoord
         if (isLid && must && pathname !== "/wachtwoord") {
-          if (!cancelled) router.replace("/wachtwoord");
+          stopAndRedirect("/wachtwoord");
           return;
         }
 
         // 2) Lid hoeft niet te wijzigen maar zit nog op /wachtwoord -> terug naar /mijn
         if (isLid && !must && pathname === "/wachtwoord") {
-          if (!cancelled) router.replace("/mijn");
+          stopAndRedirect("/mijn");
           return;
         }
 
-        // Anders is alles ok
+        // Alles ok -> pagina tonen
         if (!cancelled) setAllowed(true);
       } catch {
-        if (!cancelled) router.replace("/login");
+        // bij fetch errors (of abort) niet blijven hangen
+        if (!cancelled) {
+          // Als dit een abort is door route change: niet naar login knallen
+          // (maar gewoon stoppen met checken en wachten op nieuwe effect-run)
+          setAllowed(false);
+        }
       } finally {
         if (!cancelled) setChecking(false);
       }
