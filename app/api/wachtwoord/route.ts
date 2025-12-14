@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { verifySession, signSession, cookieName } from "@/lib/auth";
@@ -6,6 +7,11 @@ export const runtime = "nodejs";
 
 function clean(s: unknown) {
   return String(s ?? "").trim();
+}
+
+// normaliseer header namen (spaties/case stabiel)
+function h(s: unknown) {
+  return clean(s).toLowerCase().replace(/\s+/g, " ");
 }
 
 // CSV parser (werkt ook met komma’s in quotes)
@@ -40,13 +46,18 @@ function parseCsvLine(line: string): string[] {
   return out;
 }
 
+function idx(map: Record<string, number>, headerName: string) {
+  const i = map[h(headerName)];
+  return typeof i === "number" ? i : -1;
+}
+
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(cookieName)?.value;
   if (!token) {
     return NextResponse.json({ success: false, error: "Niet ingelogd" }, { status: 401 });
   }
 
-  let session;
+  let session: any;
   try {
     session = await verifySession(token);
   } catch {
@@ -99,14 +110,32 @@ export async function POST(req: NextRequest) {
   }
 
   const lines = csv.trim().split("\n");
-  const [, ...rows] = lines;
+  if (lines.length < 2) {
+    return NextResponse.json({ success: false, error: "Sheet is leeg" }, { status: 500 });
+  }
 
-  const row = rows.map(parseCsvLine).find((c) => clean(c[14]) === username); // O = 14
+  const header = parseCsvLine(lines[0]);
+  const map: Record<string, number> = {};
+  header.forEach((name, i) => (map[h(name)] = i));
+
+  const iUsername = idx(map, "username");
+  const iHash = idx(map, "password_hash");
+
+  if (iUsername === -1 || iHash === -1) {
+    return NextResponse.json(
+      { success: false, error: "Sheet kolommen missen (username/password_hash)" },
+      { status: 500 }
+    );
+  }
+
+  const rows = lines.slice(1);
+  const row = rows.map(parseCsvLine).find((c) => clean(c[iUsername]) === username);
+
   if (!row) {
     return NextResponse.json({ success: false, error: "Account niet gevonden" }, { status: 404 });
   }
 
-  const currentHash = clean(row[15]); // P = 15
+  const currentHash = clean(row[iHash]);
   if (!currentHash) {
     return NextResponse.json({ success: false, error: "Nog geen wachtwoord ingesteld" }, { status: 403 });
   }
@@ -129,7 +158,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Update sheet via Apps Script
+  // Update sheet via Apps Script (hash + vlag op NEE)
   try {
     const r = await fetch(writeUrl, {
       method: "POST",
@@ -139,6 +168,7 @@ export async function POST(req: NextRequest) {
         secret: writeSecret,
         username,
         newHash,
+        mustChangePassword: false, // 👈 vertel Apps Script dat hij op NEE moet zetten
       }),
     });
 
@@ -155,7 +185,7 @@ export async function POST(req: NextRequest) {
 
   // Nieuwe sessie token uitgeven (mustChangePassword uit)
   const newToken = await signSession({
-    rol: session.rol ?? "lid",
+    rol: (session?.rol as any) ?? "lid",
     username,
     mustChangePassword: false,
   });
