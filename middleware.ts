@@ -2,9 +2,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, cookieName, type Rol } from "@/lib/auth";
 
-function isAllowed(pathname: string, rol: Rol) {
-  // Publiek (wordt ook al in middleware zelf afgehandeld, maar extra safe)
+type SessionLike = {
+  rol?: Rol;
+  mustChangePassword?: boolean;
+};
+
+function isAllowed(pathname: string, rol: Rol, mustChangePassword: boolean) {
+  // Publiek
   if (pathname.startsWith("/login")) return true;
+
+  // ✅ Wachtwoord-route moet bereikbaar zijn (vooral voor lid)
+  if (pathname.startsWith("/wachtwoord")) {
+    // lid mag altijd naar /wachtwoord, maar als mustChangePassword=false sturen we later door naar /mijn
+    return true;
+  }
 
   // Alleen eigenaar/docent mogen naar leden/lessen
   if (pathname.startsWith("/leden") || pathname.startsWith("/lessen")) {
@@ -16,8 +27,15 @@ function isAllowed(pathname: string, rol: Rol) {
     return rol === "eigenaar";
   }
 
-  // ✅ Lid mag alleen /mijn (en evt. /)
+  // ✅ Lid regels
   if (rol === "lid") {
+    // Als lid MOET wijzigen: alleen /wachtwoord (plus / of /mijn mag je desnoods ook blokkeren)
+    // We blokkeren hier alles behalve / en /mijn niet direct, want we sturen in middleware naar /wachtwoord
+    if (mustChangePassword) {
+      return false; // alles behalve /wachtwoord wordt geweigerd -> redirect naar /wachtwoord
+    }
+
+    // Lid hoeft niet te wijzigen -> mag / en /mijn
     return pathname === "/" || pathname.startsWith("/mijn");
   }
 
@@ -45,31 +63,61 @@ export async function middleware(req: NextRequest) {
     pathname.endsWith(".webp") ||
     pathname.endsWith(".ico")
   ) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    res.headers.set("x-pathname", pathname);
+    return res;
   }
 
   const token = req.cookies.get(cookieName)?.value;
 
   if (!token) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    const res = NextResponse.redirect(new URL("/login", req.url));
+    res.headers.set("x-pathname", pathname);
+    return res;
   }
 
   try {
-    const session = await verifySession(token);
-    const rol: Rol = (session.rol ?? "gast") as Rol;
+    const session = (await verifySession(token)) as unknown as SessionLike;
 
-    if (!isAllowed(pathname, rol)) {
-      // lid die ergens anders heen gaat -> naar /mijn
-      if (rol === "lid") {
-        return NextResponse.redirect(new URL("/mijn", req.url));
-      }
-      return NextResponse.redirect(new URL("/", req.url));
+    const rol: Rol = (session.rol ?? "gast") as Rol;
+    const mustChangePassword = session.mustChangePassword === true;
+
+    // ✅ Extra: als lid NIET meer hoeft te wijzigen maar toch naar /wachtwoord gaat -> naar /mijn
+    if (rol === "lid" && !mustChangePassword && pathname.startsWith("/wachtwoord")) {
+      const res = NextResponse.redirect(new URL("/mijn", req.url));
+      res.headers.set("x-pathname", pathname);
+      return res;
     }
 
-    return NextResponse.next();
+    // ✅ Als lid WEL moet wijzigen:
+    // - alles behalve /wachtwoord -> naar /wachtwoord
+    if (rol === "lid" && mustChangePassword && !pathname.startsWith("/wachtwoord")) {
+      const res = NextResponse.redirect(new URL("/wachtwoord", req.url));
+      res.headers.set("x-pathname", pathname);
+      return res;
+    }
+
+    // Normale toegang check
+    if (!isAllowed(pathname, rol, mustChangePassword)) {
+      // lid die ergens anders heen gaat -> naar /mijn (maar mustChangePassword=true is hierboven al afgevangen)
+      if (rol === "lid") {
+        const res = NextResponse.redirect(new URL("/mijn", req.url));
+        res.headers.set("x-pathname", pathname);
+        return res;
+      }
+
+      const res = NextResponse.redirect(new URL("/", req.url));
+      res.headers.set("x-pathname", pathname);
+      return res;
+    }
+
+    const res = NextResponse.next();
+    res.headers.set("x-pathname", pathname);
+    return res;
   } catch {
     const res = NextResponse.redirect(new URL("/login", req.url));
     res.cookies.set(cookieName, "", { path: "/", maxAge: 0 });
+    res.headers.set("x-pathname", pathname);
     return res;
   }
 }
