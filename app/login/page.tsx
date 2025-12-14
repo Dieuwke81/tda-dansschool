@@ -6,6 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
+type LoginResponse =
+  | { success: true; rol: Rol; mustChangePassword?: boolean }
+  | { success?: false; error?: string; rol?: Rol; mustChangePassword?: boolean }
+  | null;
+
 function LoginInner() {
   const [username, setUsername] = useState("");
   const [wachtwoord, setWachtwoord] = useState("");
@@ -34,15 +39,21 @@ function LoginInner() {
         body: JSON.stringify({ username: u, wachtwoord }),
       });
 
-      const data = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string; rol?: Rol }
-        | null;
+      const data = (await res.json().catch(() => null)) as LoginResponse;
 
-      if (!res.ok || !data?.success) {
-        setFout(data?.error || "Onjuiste inloggegevens");
+      if (!res.ok || !data || (data as any).success !== true) {
+        setFout((data as any)?.error || "Onjuiste inloggegevens");
         return;
       }
 
+      // ✅ Als lid en moet wijzigen: altijd naar /wachtwoord
+      if (data.rol === "lid" && data.mustChangePassword === true) {
+        router.replace("/wachtwoord");
+        router.refresh();
+        return;
+      }
+
+      // Anders normale flow
       router.replace(next);
       router.refresh();
     } catch (err) {
