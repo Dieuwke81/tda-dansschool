@@ -83,7 +83,7 @@ function fixTelefoon(nr: string) {
   if (!nr) return "";
   const schoon = nr.replace(/\D/g, "");
   if (schoon.length === 0) return "";
-  if (schoon.length === 9) return "0" + schoon; // 612345678 -> 0612345678
+  if (schoon.length === 9) return "0" + schoon;
   return schoon;
 }
 
@@ -96,12 +96,8 @@ function formatWhatsAppUrl(nr: string) {
   if (!fixed) return "";
   let digits = fixed.replace(/\D/g, "");
 
-  // ga uit van NL-nummer
-  if (digits.startsWith("0031")) {
-    digits = "31" + digits.slice(4);
-  } else if (digits.startsWith("0")) {
-    digits = "31" + digits.slice(1);
-  }
+  if (digits.startsWith("0031")) digits = "31" + digits.slice(4);
+  else if (digits.startsWith("0")) digits = "31" + digits.slice(1);
 
   return `https://wa.me/${digits}`;
 }
@@ -135,31 +131,39 @@ function getDagMaand(raw: string): { dag: number; maand: number } | null {
 
 /**
  * ✅ DOCENT:
- * /api/leden filtert al op docent-lessen, maar een lid kan nog 2 lessen hebben.
- * We zetten elk lid daarom in EXACT 1 groep:
- * - Als les matcht met docent-lessen -> groep = les
- * - Anders als les2 matcht -> groep = les2
- * - Anders fallback: les || les2 || "Geen les"
+ * Toon leden in:
+ * - les (als docent die les geeft)
+ * - les2 (als docent die les geeft)
+ *
+ * Dus:
+ * - geeft docent beide lessen? -> lid in beide groepen
+ * - geeft docent maar 1? -> alleen die
+ * - geen match? -> fallback naar les of les2 (maar normaal gebeurt dit niet)
  */
 function groupByLesForDocent(leden: Lid[], allowedLessons: Set<string>) {
   const groups = new Map<string, Lid[]>();
+
+  function add(lesNaam: string, lid: Lid) {
+    const key = clean(lesNaam);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(lid);
+  }
 
   for (const lid of leden) {
     const les1 = clean(lid.les);
     const les2 = clean(lid.les2);
 
-    const n1 = norm(les1);
-    const n2 = norm(les2);
+    const m1 = !!les1 && allowedLessons.has(norm(les1));
+    const m2 = !!les2 && allowedLessons.has(norm(les2));
 
-    const key =
-      (les1 && allowedLessons.has(n1) ? les1 : "") ||
-      (les2 && allowedLessons.has(n2) ? les2 : "") ||
-      les1 ||
-      les2 ||
-      "Geen les";
+    if (m1) add(les1, lid);
+    if (m2) add(les2, lid);
 
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(lid);
+    // fallback (zou bijna nooit moeten)
+    if (!m1 && !m2) {
+      add(les1 || les2 || "Geen les", lid);
+    }
   }
 
   return sortAndUniqGroups(groups);
@@ -216,10 +220,7 @@ export default function LedenPage() {
   const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
-  // ✅ rol ophalen om owner/docent weergave te kiezen
   const [rol, setRol] = useState<Rol>("docent");
-
-  // ✅ docent-lessen ophalen voor juiste groepering (Tatjana -> Streetdance dinsdag etc.)
   const [allowedLessons, setAllowedLessons] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -247,7 +248,7 @@ export default function LedenPage() {
           // ignore
         }
 
-        // 1b) docent-lessen ophalen (alleen nodig voor docent)
+        // 1b) docent-lessen ophalen
         if (currentRol === "docent") {
           try {
             const rr = await fetch("/api/docent-lessen", {
@@ -256,10 +257,7 @@ export default function LedenPage() {
             });
             const jj = await rr.json().catch(() => null);
             const lessons = Array.isArray(jj?.lessons) ? jj.lessons : [];
-
-            if (!cancelled) {
-              setAllowedLessons(new Set(lessons.map((x: any) => norm(x))));
-            }
+            if (!cancelled) setAllowedLessons(new Set(lessons.map((x: any) => norm(x))));
           } catch {
             if (!cancelled) setAllowedLessons(new Set());
           }
@@ -338,15 +336,12 @@ export default function LedenPage() {
 
   const groepen = useMemo(() => {
     if (rol === "eigenaar") return groupByLesBoth(gefilterdeLeden);
-
-    // docent: als allowedLessons leeg is, vallen we terug op "les||les2"
     return groupByLesForDocent(gefilterdeLeden, allowedLessons);
   }, [gefilterdeLeden, rol, allowedLessons]);
 
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
 
-  // Verjaardagen vandaag & morgen (op ALLE leden, niet op filter)
   const { jarigVandaag, jarigMorgen } = useMemo(() => {
     const vandaag = new Date();
     const morgen = new Date();
@@ -363,11 +358,8 @@ export default function LedenPage() {
     leden.forEach((lid) => {
       const dm = getDagMaand(lid.geboortedatum);
       if (!dm) return;
-      if (dm.dag === dVandaag && dm.maand === mVandaag) {
-        vandaagNamen.push(lid.naam);
-      } else if (dm.dag === dMorgen && dm.maand === mMorgen) {
-        morgenNamen.push(lid.naam);
-      }
+      if (dm.dag === dVandaag && dm.maand === mVandaag) vandaagNamen.push(lid.naam);
+      else if (dm.dag === dMorgen && dm.maand === mMorgen) morgenNamen.push(lid.naam);
     });
 
     return { jarigVandaag: vandaagNamen, jarigMorgen: morgenNamen };
@@ -387,7 +379,6 @@ export default function LedenPage() {
       <main className="min-h-screen bg-black text-white p-4 md:p-6">
         <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
 
-        {/* Zoekbalk */}
         <div className="mb-4">
           <input
             type="text"
@@ -459,14 +450,10 @@ export default function LedenPage() {
 
             <div className="space-y-1 mt-6 text-sm">
               {jarigVandaag.length > 0 && (
-                <p className="text-pink-400">
-                  🎉 Vandaag jarig: {jarigVandaag.join(", ")}
-                </p>
+                <p className="text-pink-400">🎉 Vandaag jarig: {jarigVandaag.join(", ")}</p>
               )}
               {jarigMorgen.length > 0 && (
-                <p className="text-pink-300">
-                  🎂 Morgen jarig: {jarigMorgen.join(", ")}
-                </p>
+                <p className="text-pink-300">🎂 Morgen jarig: {jarigMorgen.join(", ")}</p>
               )}
             </div>
           </>
@@ -485,9 +472,7 @@ export default function LedenPage() {
 function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">
-        {label}
-      </div>
+      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</div>
       <div className="whitespace-pre-line text-sm">{value}</div>
     </div>
   );
@@ -520,10 +505,7 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
             label="Email"
             value={
               lid.email ? (
-                <a
-                  href={`mailto:${lid.email}`}
-                  className="text-pink-400 underline break-all"
-                >
+                <a href={`mailto:${lid.email}`} className="text-pink-400 underline break-all">
                   {lid.email}
                 </a>
               ) : (
@@ -538,10 +520,7 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
               <>
                 {lid.tel1 && (
                   <div className="mb-1 flex items-center gap-2">
-                    <a
-                      href={`tel:${formatTelefoon(lid.tel1)}`}
-                      className="text-pink-400 underline"
-                    >
+                    <a href={`tel:${formatTelefoon(lid.tel1)}`} className="text-pink-400 underline">
                       {formatTelefoon(lid.tel1)}
                     </a>
                     <a
@@ -557,10 +536,7 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
                 )}
                 {lid.tel2 && (
                   <div className="flex items-center gap-2">
-                    <a
-                      href={`tel:${formatTelefoon(lid.tel2)}`}
-                      className="text-pink-400 underline"
-                    >
+                    <a href={`tel:${formatTelefoon(lid.tel2)}`} className="text-pink-400 underline">
                       {formatTelefoon(lid.tel2)}
                     </a>
                     <a
@@ -586,10 +562,7 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
             label="Adres"
             value={lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"}
           />
-          <Detail
-            label="Datum akkoord voorwaarden"
-            value={formatDatum(lid.datumGoedkeuring) || "-"}
-          />
+          <Detail label="Datum akkoord voorwaarden" value={formatDatum(lid.datumGoedkeuring) || "-"} />
         </div>
 
         <button
@@ -601,4 +574,4 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
       </div>
     </div>
   );
-}
+    }
