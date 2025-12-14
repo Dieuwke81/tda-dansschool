@@ -32,18 +32,24 @@ export default function MijnPagina() {
   const [data, setData] = useState<MijnData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // extra debug info op het scherm
+  const [debug, setDebug] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
+        setDebug(null);
+
         // 1) sessie check
         const sres = await fetch("/api/session", {
           cache: "no-store",
           credentials: "same-origin",
         });
 
-        const sdata = (await sres.json().catch(() => null)) as SessionResponse | null;
+        const stext = await sres.text();
+        const sdata = (JSON.parse(stext) as SessionResponse) ?? null;
 
         if (!sres.ok || !sdata?.loggedIn || !sdata?.rol) {
           router.replace("/login");
@@ -56,26 +62,53 @@ export default function MijnPagina() {
           return;
         }
 
-        // 3) haal mijn gegevens op
-        const res = await fetch("/api/mijn", { cache: "no-store" });
-        const d = await res.json().catch(() => null);
+        // 3) haal mijn gegevens op (BELANGRIJK: credentials)
+        const res = await fetch("/api/mijn", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+
+        const text = await res.text();
 
         if (!res.ok) {
+          // probeer JSON error, anders ruwe tekst
+          try {
+            const j = JSON.parse(text);
+            if (!cancelled) setError(j?.error || "Kon je gegevens niet ophalen");
+          } catch {
+            if (!cancelled) setError("Kon je gegevens niet ophalen");
+          }
+
           if (!cancelled) {
-            setError(d?.error || "Kon je gegevens niet ophalen");
-            if (res.status === 401) router.replace("/login");
+            setDebug(`DEBUG /api/mijn status=${res.status}\n${text.slice(0, 300)}`);
+          }
+
+          if (res.status === 401) router.replace("/login");
+          return;
+        }
+
+        // ok-response: moet JSON zijn
+        let d: any = null;
+        try {
+          d = JSON.parse(text);
+        } catch {
+          d = null;
+        }
+
+        if (!d) {
+          if (!cancelled) {
+            setError("Kon je gegevens niet ophalen (response was geen JSON)");
+            setDebug(`DEBUG /api/mijn status=${res.status}\n${text.slice(0, 300)}`);
           }
           return;
         }
 
-        if (!d) {
-          if (!cancelled) setError("Kon je gegevens niet ophalen (lege response)");
-          return;
-        }
-
         if (!cancelled) setData(d as MijnData);
-      } catch {
-        if (!cancelled) setError("Kon je gegevens niet ophalen");
+      } catch (e: any) {
+        if (!cancelled) {
+          setError("Kon je gegevens niet ophalen");
+          setDebug(`DEBUG exception: ${String(e?.message || e)}`);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -89,7 +122,7 @@ export default function MijnPagina() {
 
   async function uitloggen() {
     try {
-      await fetch("/api/logout", { method: "POST" });
+      await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
     } catch {}
     router.replace("/login");
   }
@@ -106,6 +139,13 @@ export default function MijnPagina() {
     return (
       <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
         <p className="text-red-400 mb-4">{error}</p>
+
+        {debug && (
+          <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto mb-4">
+            {debug}
+          </pre>
+        )}
+
         <button onClick={uitloggen} className="text-gray-400 underline text-sm">
           Uitloggen
         </button>
@@ -117,6 +157,13 @@ export default function MijnPagina() {
     return (
       <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
         <p className="text-gray-300 mb-4">Geen gegevens gevonden.</p>
+
+        {debug && (
+          <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto mb-4">
+            {debug}
+          </pre>
+        )}
+
         <button onClick={uitloggen} className="text-gray-400 underline text-sm">
           Uitloggen
         </button>
