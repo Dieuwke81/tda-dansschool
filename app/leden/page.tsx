@@ -602,4 +602,3 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
     </div>
   );
 }
-```0
