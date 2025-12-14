@@ -134,13 +134,22 @@ function getDagMaand(raw: string): { dag: number; maand: number } | null {
 }
 
 /**
- * ✅ DOCENT: lid komt in EXACT 1 groep (les2 heeft voorrang)
+ * ✅ DOCENT:
+ * /api/leden levert al alleen leden terug van de lessen van deze docent.
+ * We zetten elk lid daarom in EXACT 1 groep:
+ * - als les gevuld is -> die groep
+ * - anders als les2 gevuld is -> die groep
+ * (geen "les2 voorrang", maar gewoon "gebruik de les die er daadwerkelijk staat")
  */
 function groupByLesSingle(leden: Lid[]) {
   const groups = new Map<string, Lid[]>();
 
   for (const lid of leden) {
-    const key = clean(lid.les2) || clean(lid.les) || "Geen les";
+    const les1 = clean(lid.les);
+    const les2 = clean(lid.les2);
+
+    const key = les1 || les2 || "Geen les";
+
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(lid);
   }
@@ -172,7 +181,6 @@ function groupByLesBoth(leden: Lid[]) {
 function sortAndUniqGroups(groups: Map<string, Lid[]>) {
   const sorted = Array.from(groups.entries())
     .map(([lesNaam, lijst]) => {
-      // uniek per lesgroep
       const seen = new Set<string>();
       const uniek = lijst.filter((l) => {
         const k = lidKey(l);
@@ -182,15 +190,12 @@ function sortAndUniqGroups(groups: Map<string, Lid[]>) {
         return true;
       });
 
-      // sorteer leden alfabetisch
       uniek.sort((a, b) => clean(a.naam).localeCompare(clean(b.naam), "nl"));
-
       return [lesNaam, uniek] as const;
     })
-    // sorteer lessen alfabetisch
     .sort((a, b) => a[0].localeCompare(b[0], "nl"));
 
-  return sorted; // [ [lesNaam, leden[]], ... ]
+  return sorted;
 }
 
 /* ---------------------------------- */
@@ -204,7 +209,6 @@ export default function LedenPage() {
   const [showModal, setShowModal] = useState(false);
 
   // ✅ rol ophalen om owner/docent weergave te kiezen
-  // default "docent" = veilig (nooit per ongeluk owner-weergave tonen)
   const [rol, setRol] = useState<Rol>("docent");
 
   useEffect(() => {
@@ -217,7 +221,10 @@ export default function LedenPage() {
 
         // 1) rol ophalen (mag falen, default blijft docent)
         try {
-          const s = await fetch("/api/session", { cache: "no-store", credentials: "include" });
+          const s = await fetch("/api/session", {
+            cache: "no-store",
+            credentials: "include",
+          });
           const d = (await s.json().catch(() => null)) as SessionResponse | null;
           if (!cancelled && s.ok && d?.loggedIn && d?.rol) setRol(d.rol);
         } catch {
@@ -293,7 +300,6 @@ export default function LedenPage() {
     });
   }, [leden, zoekTerm]);
 
-  // ✅ rol-afhankelijke groepering
   const groepen = useMemo(() => {
     return rol === "eigenaar"
       ? groupByLesBoth(gefilterdeLeden)
@@ -416,10 +422,14 @@ export default function LedenPage() {
 
             <div className="space-y-1 mt-6 text-sm">
               {jarigVandaag.length > 0 && (
-                <p className="text-pink-400">🎉 Vandaag jarig: {jarigVandaag.join(", ")}</p>
+                <p className="text-pink-400">
+                  🎉 Vandaag jarig: {jarigVandaag.join(", ")}
+                </p>
               )}
               {jarigMorgen.length > 0 && (
-                <p className="text-pink-300">🎂 Morgen jarig: {jarigMorgen.join(", ")}</p>
+                <p className="text-pink-300">
+                  🎂 Morgen jarig: {jarigMorgen.join(", ")}
+                </p>
               )}
             </div>
           </>
@@ -554,4 +564,4 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
       </div>
     </div>
   );
-      }
+}
