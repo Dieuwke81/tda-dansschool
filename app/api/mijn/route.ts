@@ -8,6 +8,11 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
+// normaliseer header namen (spaties/case stabiel)
+function h(s: unknown) {
+  return clean(s).toLowerCase().replace(/\s+/g, " ");
+}
+
 // simpele CSV parser (werkt ook met komma’s in quotes)
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -40,6 +45,11 @@ function parseCsvLine(line: string): string[] {
   return out;
 }
 
+function idx(map: Record<string, number>, headerName: string) {
+  const i = map[h(headerName)];
+  return typeof i === "number" ? i : -1;
+}
+
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(cookieName)?.value;
   if (!token) {
@@ -54,8 +64,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Ongeldige sessie" }, { status: 401 });
   }
 
-  // Username is verplicht (jij wil niet op email vallen)
-  // -> 401 zodat de client doorstuurt naar /login
   if (!username) {
     return NextResponse.json(
       { error: "Gebruiker ontbreekt in sessie" },
@@ -81,43 +89,52 @@ export async function GET(req: NextRequest) {
   }
 
   const lines = csv.trim().split("\n");
-  const [, ...rows] = lines;
+  if (lines.length < 2) {
+    return NextResponse.json({ error: "Sheet is leeg" }, { status: 500 });
+  }
 
-  // Kolommen:
-  // B=1 naam
-  // C=2 email
-  // D=3 les
-  // E=4 2de les
-  // F=5 soort
-  // G=6 toestemming
-  // H=7 tel1
-  // I=8 tel2
-  // J=9 geboortedatum
-  // K=10 adres
-  // L=11 postcode
-  // M=12 plaats
-  // O=14 username
+  const header = parseCsvLine(lines[0]);
+  const map: Record<string, number> = {};
+  header.forEach((name, i) => {
+    map[h(name)] = i;
+  });
 
+  // jouw sheet headers (letterlijk)
+  const iUsername = idx(map, "username");
+  if (iUsername === -1) {
+    return NextResponse.json(
+      { error: "Kolom 'username' niet gevonden in sheet" },
+      { status: 500 }
+    );
+  }
+
+  const rows = lines.slice(1);
   const row = rows
     .map(parseCsvLine)
-    .find((c) => clean(c[14]) === username);
+    .find((c) => clean(c[iUsername]) === username);
 
   if (!row) {
     return NextResponse.json({ error: "Account niet gevonden" }, { status: 404 });
   }
 
+  // kolommen ophalen op naam (als een kolom ontbreekt -> leeg)
+  const get = (name: string) => {
+    const i = idx(map, name);
+    return i === -1 ? "" : clean(row[i]);
+  };
+
   return NextResponse.json({
-    naam: row[1],
-    email: row[2],
-    les: row[3],
-    tweedeLes: row[4],
-    soort: row[5],
-    toestemmingBeeldmateriaal: row[6], // ✅ keynaam matcht jouw UI
-    telefoon1: row[7],
-    telefoon2: row[8],
-    geboortedatum: row[9],
-    adres: row[10],
-    postcode: row[11],
-    plaats: row[12],
+    naam: get("naam"),
+    email: get("email"),
+    les: get("les"),
+    tweedeLes: get("2de les"),
+    soort: get("soort"),
+    toestemmingBeeldmateriaal: get("toestemming beeldmateriaal"),
+    telefoon1: get("telefoon 1"),
+    telefoon2: get("telefoon 2"),
+    geboortedatum: get("geboortedatum"),
+    adres: get("adres"),
+    postcode: get("postcode"),
+    plaats: get("plaats"),
   });
 }
