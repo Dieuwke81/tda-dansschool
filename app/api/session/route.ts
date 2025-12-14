@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       {
         loggedIn: true,
         rol: session.rol ?? "gast",
-        username: session.username,
+        username: session.username ?? "",
         mustChangePassword: session.mustChangePassword === true,
       },
       { status: 200 }
