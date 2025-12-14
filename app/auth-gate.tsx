@@ -29,21 +29,29 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
     function go(to: string, reason: string) {
       if (cancelled) return;
+      setAllowed(false);
+      setChecking(true);
       setDebug(`redirect -> ${to} (${reason})`);
       router.replace(to);
     }
 
     async function run() {
+      if (cancelled) return;
+
       setAllowed(false);
       setChecking(true);
       setDebug(`checking pathname=${pathname}`);
 
+      // Publieke routes
       if (PUBLIC_PATHS.includes(pathname)) {
         setAllowed(true);
         setChecking(false);
         setDebug("public path allowed");
         return;
       }
+
+      // Timeout, zodat je nooit eindeloos blijft hangen
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
       try {
         const res = await fetch("/api/session", {
@@ -52,7 +60,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
           signal: controller.signal,
         });
 
-        const data = (await res.json().catch(() => null)) as SessionResponse | null;
+        const text = await res.text();
+        clearTimeout(timeout);
+
+        let data: SessionResponse | null = null;
+        try {
+          data = JSON.parse(text) as SessionResponse;
+        } catch {
+          go("/login", `session not json: ${text.slice(0, 120)}`);
+          return;
+        }
 
         if (!res.ok || !data?.loggedIn || !data?.rol) {
           go("/login", `not logged in (status=${res.status})`);
@@ -62,22 +79,47 @@ export function AuthGate({ children }: { children: ReactNode }) {
         const isLid = data.rol === "lid";
         const must = data.mustChangePassword === true;
 
-        // ✅ enige “force” regel:
-        // lid moet wijzigen -> altijd naar /wachtwoord
-        if (isLid && must && pathname !== "/wachtwoord") {
+        // ✅ 1) Lid moet wachtwoord wijzigen:
+        // - /wachtwoord is dan TOEGESTAAN
+        // - andere routes -> force redirect
+        if (isLid && must) {
+          if (pathname === "/wachtwoord") {
+            setAllowed(true);
+            setDebug(
+              `allowed: on /wachtwoord with mustChangePassword (user=${data.username ?? "-"})`
+            );
+            return;
+          }
+
           go("/wachtwoord", `mustChangePassword true for ${data.username ?? "-"}`);
           return;
         }
 
-        // ✅ verder: gewoon toestaan (ook /wachtwoord)
+        // ✅ 2) Lid hoeft niet te wijzigen maar staat nog op /wachtwoord -> terug naar /mijn
+        if (isLid && !must && pathname === "/wachtwoord") {
+          go("/mijn", `mustChangePassword false, leaving /wachtwoord (user=${data.username ?? "-"})`);
+          return;
+        }
+
+        // ✅ 3) Overig: gewoon toestaan
         setAllowed(true);
         setDebug(`allowed (rol=${data.rol}, must=${String(must)}, user=${data.username ?? "-"})`);
+      } catch (e: any) {
+        clearTimeout(timeout);
+
+        if (e?.name === "AbortError") {
+          go("/login", "session fetch timeout/abort");
+          return;
+        }
+
+        go("/login", `session fetch error: ${String(e?.message || e)}`);
       } finally {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
       }
     }
 
     run();
+
     return () => {
       cancelled = true;
       controller.abort();
@@ -102,6 +144,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto">
           {debug}
         </pre>
+        <button className="mt-4 text-gray-400 underline text-sm" onClick={() => router.replace("/login")}>
+          Naar login
+        </button>
       </main>
     );
   }
