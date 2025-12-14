@@ -3,12 +3,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AuthGuard from "../auth-guard";
 
 type MijnData = {
   naam: string;
   email: string;
   les: string;
-  tweedeLes: string;
+  tweedeles: string; // ✅ klopt met /api/mijn output
   soort: string;
   toestemmingBeeldmateriaal: string;
   telefoon1: string;
@@ -19,96 +20,48 @@ type MijnData = {
   plaats: string;
 };
 
-type SessionResponse = {
-  loggedIn?: boolean;
-  rol?: "eigenaar" | "docent" | "gast" | "lid";
-  username?: string;
-  mustChangePassword?: boolean;
-};
+export default function MijnPage() {
+  return (
+    <AuthGuard allowedRoles={["lid", "eigenaar", "docent"]}>
+      <Inner />
+    </AuthGuard>
+  );
+}
 
-export default function MijnPagina() {
+function Inner() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<MijnData | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // extra debug info op het scherm
-  const [debug, setDebug] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        setDebug(null);
-
-        // 1) sessie check
-        const sres = await fetch("/api/session", {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
-
-        const stext = await sres.text();
-        const sdata = (JSON.parse(stext) as SessionResponse) ?? null;
-
-        if (!sres.ok || !sdata?.loggedIn || !sdata?.rol) {
-          router.replace("/login");
-          return;
-        }
-
-        // 2) force wachtwoord wijzigen
-        if (sdata.rol === "lid" && sdata.mustChangePassword === true) {
-          router.replace("/wachtwoord");
-          return;
-        }
-
-        // 3) haal mijn gegevens op (BELANGRIJK: credentials)
         const res = await fetch("/api/mijn", {
           cache: "no-store",
           credentials: "same-origin",
         });
 
-        const text = await res.text();
+        const d = await res.json().catch(() => null);
 
         if (!res.ok) {
-          // probeer JSON error, anders ruwe tekst
-          try {
-            const j = JSON.parse(text);
-            if (!cancelled) setError(j?.error || "Kon je gegevens niet ophalen");
-          } catch {
-            if (!cancelled) setError("Kon je gegevens niet ophalen");
-          }
-
           if (!cancelled) {
-            setDebug(`DEBUG /api/mijn status=${res.status}\n${text.slice(0, 300)}`);
+            setError(d?.error || "Kon je gegevens niet ophalen");
+            if (res.status === 401) router.replace("/login");
           }
-
-          if (res.status === 401) router.replace("/login");
           return;
         }
 
-        // ok-response: moet JSON zijn
-        let d: any = null;
-        try {
-          d = JSON.parse(text);
-        } catch {
-          d = null;
-        }
-
         if (!d) {
-          if (!cancelled) {
-            setError("Kon je gegevens niet ophalen (response was geen JSON)");
-            setDebug(`DEBUG /api/mijn status=${res.status}\n${text.slice(0, 300)}`);
-          }
+          if (!cancelled) setError("Geen gegevens gevonden.");
           return;
         }
 
         if (!cancelled) setData(d as MijnData);
-      } catch (e: any) {
-        if (!cancelled) {
-          setError("Kon je gegevens niet ophalen");
-          setDebug(`DEBUG exception: ${String(e?.message || e)}`);
-        }
+      } catch {
+        if (!cancelled) setError("Kon je gegevens niet ophalen");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -123,7 +76,9 @@ export default function MijnPagina() {
   async function uitloggen() {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
-    } catch {}
+    } catch {
+      // negeren
+    }
     router.replace("/login");
   }
 
@@ -139,13 +94,6 @@ export default function MijnPagina() {
     return (
       <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
         <p className="text-red-400 mb-4">{error}</p>
-
-        {debug && (
-          <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto mb-4">
-            {debug}
-          </pre>
-        )}
-
         <button onClick={uitloggen} className="text-gray-400 underline text-sm">
           Uitloggen
         </button>
@@ -157,13 +105,6 @@ export default function MijnPagina() {
     return (
       <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
         <p className="text-gray-300 mb-4">Geen gegevens gevonden.</p>
-
-        {debug && (
-          <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto mb-4">
-            {debug}
-          </pre>
-        )}
-
         <button onClick={uitloggen} className="text-gray-400 underline text-sm">
           Uitloggen
         </button>
@@ -180,7 +121,7 @@ export default function MijnPagina() {
           <Field label="Naam" value={data.naam} />
           <Field label="Email" value={data.email} />
           <Field label="Les" value={data.les} />
-          <Field label="2e les" value={data.tweedeLes} />
+          <Field label="2e les" value={data.tweedeles} />
           <Field label="Soort" value={data.soort} />
           <Field label="Toestemming beeldmateriaal" value={data.toestemmingBeeldmateriaal} />
           <Field label="Telefoon 1" value={data.telefoon1} />
