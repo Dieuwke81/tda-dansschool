@@ -4,6 +4,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AuthGuard from "../auth-guard";
 
+type Rol = "eigenaar" | "docent" | "gast" | "lid";
+
+type SessionResponse = {
+  loggedIn?: boolean;
+  rol?: Rol;
+  username?: string;
+  mustChangePassword?: boolean;
+};
+
 type Lid = {
   id: string;
   naam: string;
@@ -66,6 +75,10 @@ function norm(s: unknown) {
     .toLowerCase();
 }
 
+function lidKey(l: Lid) {
+  return clean(l.id) || clean(l.email) || clean(l.naam);
+}
+
 function fixTelefoon(nr: string) {
   if (!nr) return "";
   const schoon = nr.replace(/\D/g, "");
@@ -121,12 +134,7 @@ function getDagMaand(raw: string): { dag: number; maand: number } | null {
 }
 
 /**
- * ✅ Groepeer per les, maar: elk lid komt in EXACT 1 groep.
- * - Als lid.les2 bestaat, dan is dat de groep (voor docenten is dit precies wat je wil)
- * - Anders lid.les
- *
- * Hierdoor komen leden die "Dansmix" als 1e les hebben maar "Streetdance" als 2e les
- * gewoon in de Streetdance-groep te staan.
+ * ✅ DOCENT: lid komt in EXACT 1 groep (les2 heeft voorrang)
  */
 function groupByLesSingle(leden: Lid[]) {
   const groups = new Map<string, Lid[]>();
@@ -137,15 +145,40 @@ function groupByLesSingle(leden: Lid[]) {
     groups.get(key)!.push(lid);
   }
 
+  return sortAndUniqGroups(groups);
+}
+
+/**
+ * ✅ EIGENAAR: lid mag in 2 groepen staan (les én les2)
+ */
+function groupByLesBoth(leden: Lid[]) {
+  const groups = new Map<string, Lid[]>();
+
+  function add(lesNaam: string, lid: Lid) {
+    const key = clean(lesNaam);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(lid);
+  }
+
+  for (const lid of leden) {
+    add(lid.les, lid);
+    add(lid.les2, lid);
+  }
+
+  return sortAndUniqGroups(groups);
+}
+
+function sortAndUniqGroups(groups: Map<string, Lid[]>) {
   const sorted = Array.from(groups.entries())
     .map(([lesNaam, lijst]) => {
       // uniek per lesgroep
       const seen = new Set<string>();
       const uniek = lijst.filter((l) => {
-        const id = clean(l.id) || clean(l.email) || clean(l.naam);
-        if (!id) return false;
-        if (seen.has(id)) return false;
-        seen.add(id);
+        const k = lidKey(l);
+        if (!k) return false;
+        if (seen.has(k)) return false;
+        seen.add(k);
         return true;
       });
 
@@ -170,35 +203,47 @@ export default function LedenPage() {
   const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  // ✅ rol ophalen om owner/docent weergave te kiezen
+  // default "docent" = veilig (nooit per ongeluk owner-weergave tonen)
+  const [rol, setRol] = useState<Rol>("docent");
+
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+
+    async function loadAll() {
       try {
         setLoading(true);
         setError(null);
 
+        // 1) rol ophalen (mag falen, default blijft docent)
+        try {
+          const s = await fetch("/api/session", { cache: "no-store", credentials: "include" });
+          const d = (await s.json().catch(() => null)) as SessionResponse | null;
+          if (!cancelled && s.ok && d?.loggedIn && d?.rol) setRol(d.rol);
+        } catch {
+          // ignore
+        }
+
+        // 2) leden ophalen
         const res = await fetch("/api/leden", {
           cache: "no-store",
           credentials: "include",
         });
-        if (!res.ok) {
-          throw new Error("Kon de ledenlijst niet ophalen");
-        }
+        if (!res.ok) throw new Error("Kon de ledenlijst niet ophalen");
 
         const text = await res.text();
         const lines = text.trim().split("\n");
         if (lines.length < 2) {
-          setLeden([]);
+          if (!cancelled) setLeden([]);
           return;
         }
 
-        // header overslaan
         const [, ...rows] = lines;
 
         const data: Lid[] = rows
           .filter((line) => line.trim().length > 0)
           .map((line) => {
             const c = parseCsvLine(line);
-
             return {
               id: c[0] ?? "",
               naam: c[1] ?? "",
@@ -217,16 +262,21 @@ export default function LedenPage() {
             };
           });
 
-        setLeden(data);
-        if (data.length > 0) setGeselecteerdId(data[0].id);
+        if (!cancelled) {
+          setLeden(data);
+          if (data.length > 0) setGeselecteerdId(data[0].id);
+        }
       } catch (err: any) {
-        setError(err.message ?? "Er ging iets mis");
+        if (!cancelled) setError(err.message ?? "Er ging iets mis");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    load();
+    loadAll();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const gefilterdeLeden = useMemo(() => {
@@ -243,8 +293,12 @@ export default function LedenPage() {
     });
   }, [leden, zoekTerm]);
 
-  // ✅ nieuwe groepering: elk lid in precies 1 groep
-  const groepen = useMemo(() => groupByLesSingle(gefilterdeLeden), [gefilterdeLeden]);
+  // ✅ rol-afhankelijke groepering
+  const groepen = useMemo(() => {
+    return rol === "eigenaar"
+      ? groupByLesBoth(gefilterdeLeden)
+      : groupByLesSingle(gefilterdeLeden);
+  }, [gefilterdeLeden, rol]);
 
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
@@ -273,16 +327,13 @@ export default function LedenPage() {
       }
     });
 
-    return {
-      jarigVandaag: vandaagNamen,
-      jarigMorgen: morgenNamen,
-    };
+    return { jarigVandaag: vandaagNamen, jarigMorgen: morgenNamen };
   }, [leden]);
 
   const totaalUniek = useMemo(() => {
     const seen = new Set<string>();
     for (const l of gefilterdeLeden) {
-      const k = clean(l.id) || clean(l.email) || clean(l.naam);
+      const k = lidKey(l);
       if (k) seen.add(k);
     }
     return seen.size;
@@ -313,12 +364,10 @@ export default function LedenPage() {
 
         {!loading && !error && totaalUniek > 0 && (
           <>
-            {/* Overzicht */}
             <div className="text-sm text-gray-300 mb-3">
               {totaalUniek} leden (gegroepeerd per les)
             </div>
 
-            {/* Groepen per les */}
             <div className="space-y-4">
               {groepen.map(([lesNaam, lijst]) => (
                 <div
@@ -334,7 +383,7 @@ export default function LedenPage() {
                     {lijst.map((lid) => {
                       const actief = lid.id === geselecteerdId;
                       return (
-                        <li key={`${lesNaam}-${lid.id || lid.email || lid.naam}`}>
+                        <li key={`${lesNaam}-${lidKey(lid)}`}>
                           <button
                             type="button"
                             onClick={() => {
@@ -365,23 +414,17 @@ export default function LedenPage() {
               ))}
             </div>
 
-            {/* Verjaardagen onderaan */}
             <div className="space-y-1 mt-6 text-sm">
               {jarigVandaag.length > 0 && (
-                <p className="text-pink-400">
-                  🎉 Vandaag jarig: {jarigVandaag.join(", ")}
-                </p>
+                <p className="text-pink-400">🎉 Vandaag jarig: {jarigVandaag.join(", ")}</p>
               )}
               {jarigMorgen.length > 0 && (
-                <p className="text-pink-300">
-                  🎂 Morgen jarig: {jarigMorgen.join(", ")}
-                </p>
+                <p className="text-pink-300">🎂 Morgen jarig: {jarigMorgen.join(", ")}</p>
               )}
             </div>
           </>
         )}
 
-        {/* Modal met details */}
         {showModal && geselecteerdLid && (
           <DetailModal lid={geselecteerdLid} onClose={() => setShowModal(false)} />
         )}
@@ -511,4 +554,4 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
       </div>
     </div>
   );
-}
+      }
