@@ -4,11 +4,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login"]; // eventueel later uitbreiden
 
 type SessionResponse = {
   loggedIn?: boolean;
   rol?: "eigenaar" | "docent" | "gast" | "lid";
+  username?: string;
   mustChangePassword?: boolean;
 };
 
@@ -27,7 +28,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setAllowed(false);
       setChecking(true);
 
-      // Publieke pagina’s altijd toestaan
+      // Publieke routes altijd toestaan
       if (PUBLIC_PATHS.includes(pathname)) {
         if (!cancelled) {
           setAllowed(true);
@@ -43,27 +44,34 @@ export function AuthGate({ children }: { children: ReactNode }) {
           signal: controller.signal,
         });
 
-        const data = (await res.json().catch(() => null)) as SessionResponse | null;
-
-        if (!res.ok || !data?.loggedIn) {
+        if (!res.ok) {
           if (!cancelled) router.replace("/login");
           return;
         }
 
-        // ✅ Force password change flow (globaal, 1 plek!)
-        if (data.rol === "lid" && data.mustChangePassword === true) {
-          if (pathname !== "/wachtwoord") {
-            if (!cancelled) router.replace("/wachtwoord");
-            return;
-          }
+        const data = (await res.json()) as SessionResponse;
+
+        if (!data?.loggedIn) {
+          if (!cancelled) router.replace("/login");
+          return;
         }
 
-        // ✅ Als je op /wachtwoord staat maar je hoeft niet te wijzigen -> door naar /mijn
-        if (pathname === "/wachtwoord" && data.mustChangePassword !== true) {
+        const isLid = data.rol === "lid";
+        const must = data.mustChangePassword === true;
+
+        // 1) Lid moet wachtwoord wijzigen -> force naar /wachtwoord
+        if (isLid && must && pathname !== "/wachtwoord") {
+          if (!cancelled) router.replace("/wachtwoord");
+          return;
+        }
+
+        // 2) Lid hoeft niet te wijzigen maar zit nog op /wachtwoord -> terug naar /mijn
+        if (isLid && !must && pathname === "/wachtwoord") {
           if (!cancelled) router.replace("/mijn");
           return;
         }
 
+        // Anders is alles ok
         if (!cancelled) setAllowed(true);
       } catch {
         if (!cancelled) router.replace("/login");
