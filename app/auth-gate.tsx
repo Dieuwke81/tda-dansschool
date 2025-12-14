@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -8,11 +9,13 @@ const PUBLIC_PATHS = ["/login"];
 type SessionResponse = {
   loggedIn?: boolean;
   rol?: "eigenaar" | "docent" | "gast" | "lid";
+  mustChangePassword?: boolean;
 };
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+
   const [allowed, setAllowed] = useState(false);
   const [checking, setChecking] = useState(true);
 
@@ -21,14 +24,15 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const controller = new AbortController();
 
     async function checkSession() {
-      // reset bij elke route change
       setAllowed(false);
       setChecking(true);
 
       // Publieke pagina’s altijd toestaan
       if (PUBLIC_PATHS.includes(pathname)) {
-        setAllowed(true);
-        setChecking(false);
+        if (!cancelled) {
+          setAllowed(true);
+          setChecking(false);
+        }
         return;
       }
 
@@ -39,18 +43,28 @@ export function AuthGate({ children }: { children: ReactNode }) {
           signal: controller.signal,
         });
 
-        if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as SessionResponse | null;
+
+        if (!res.ok || !data?.loggedIn) {
           if (!cancelled) router.replace("/login");
           return;
         }
 
-        const data = (await res.json()) as SessionResponse;
-
-        if (data.loggedIn) {
-          if (!cancelled) setAllowed(true);
-        } else {
-          if (!cancelled) router.replace("/login");
+        // ✅ Force password change flow (globaal, 1 plek!)
+        if (data.rol === "lid" && data.mustChangePassword === true) {
+          if (pathname !== "/wachtwoord") {
+            if (!cancelled) router.replace("/wachtwoord");
+            return;
+          }
         }
+
+        // ✅ Als je op /wachtwoord staat maar je hoeft niet te wijzigen -> door naar /mijn
+        if (pathname === "/wachtwoord" && data.mustChangePassword !== true) {
+          if (!cancelled) router.replace("/mijn");
+          return;
+        }
+
+        if (!cancelled) setAllowed(true);
       } catch {
         if (!cancelled) router.replace("/login");
       } finally {
