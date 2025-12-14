@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -21,6 +22,49 @@ type Lid = {
 };
 
 /* ---------- HULPFUNCTIES ---------- */
+
+// ✅ CSV parser (werkt ook met komma’s in quotes)
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === "," && !inQuotes) {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+
+    cur += ch;
+  }
+
+  out.push(cur.trim());
+  return out;
+}
+
+function clean(s: unknown) {
+  return String(s ?? "").trim();
+}
+
+function norm(s: unknown) {
+  return clean(s)
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 
 function fixTelefoon(nr: string) {
   if (!nr) return "";
@@ -76,6 +120,45 @@ function getDagMaand(raw: string): { dag: number; maand: number } | null {
   return { dag: d, maand: m };
 }
 
+// ✅ Groepeer per les (les + les2), met unieke leden per groep
+function groupByLes(leden: Lid[]) {
+  const groups = new Map<string, Lid[]>();
+
+  function add(lesNaam: string, lid: Lid) {
+    const key = clean(lesNaam);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(lid);
+  }
+
+  for (const lid of leden) {
+    add(lid.les, lid);
+    add(lid.les2, lid);
+  }
+
+  const sorted = Array.from(groups.entries())
+    .map(([lesNaam, lijst]) => {
+      // uniek per lesgroep
+      const seen = new Set<string>();
+      const uniek = lijst.filter((l) => {
+        const id = clean(l.id) || clean(l.email) || clean(l.naam);
+        if (!id) return false;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      // sorteer leden alfabetisch
+      uniek.sort((a, b) => clean(a.naam).localeCompare(clean(b.naam), "nl"));
+
+      return [lesNaam, uniek] as const;
+    })
+    // sorteer lessen alfabetisch
+    .sort((a, b) => a[0].localeCompare(b[0], "nl"));
+
+  return sorted; // [ [lesNaam, leden[]], ... ]
+}
+
 /* ---------------------------------- */
 
 export default function LedenPage() {
@@ -90,19 +173,30 @@ export default function LedenPage() {
     async function load() {
       try {
         setLoading(true);
-        const res = await fetch("/api/leden");
+        setError(null);
+
+        const res = await fetch("/api/leden", { cache: "no-store", credentials: "include" });
         if (!res.ok) {
           throw new Error("Kon de ledenlijst niet ophalen");
         }
-        const text = await res.text();
-        const [, ...lines] = text.trim().split("\n");
 
-        const data: Lid[] = lines
+        const text = await res.text();
+        const lines = text.trim().split("\n");
+        if (lines.length < 2) {
+          setLeden([]);
+          return;
+        }
+
+        // header overslaan
+        const [, ...rows] = lines;
+
+        const data: Lid[] = rows
           .filter((line) => line.trim().length > 0)
           .map((line) => {
-            const c = line.split(",");
+            const c = parseCsvLine(line);
 
-            // Kolommen nu: A=id, B=naam, C=email, D=les, E=2e les, F=soort,
+            // Kolommen:
+            // A=id, B=naam, C=email, D=les, E=2e les, F=soort,
             // G=toestemming, H=tel1, I=tel2, J=geboortedatum, K=adres,
             // L=postcode, M=plaats, N=datum goedkeuring
             return {
@@ -124,9 +218,7 @@ export default function LedenPage() {
           });
 
         setLeden(data);
-        if (data.length > 0) {
-          setGeselecteerdId(data[0].id);
-        }
+        if (data.length > 0) setGeselecteerdId(data[0].id);
       } catch (err: any) {
         setError(err.message ?? "Er ging iets mis");
       } finally {
@@ -138,18 +230,25 @@ export default function LedenPage() {
   }, []);
 
   const gefilterdeLeden = useMemo(() => {
-    const zoek = zoekTerm.toLowerCase();
-    return leden.filter(
-      (lid) =>
-        lid.naam.toLowerCase().includes(zoek) ||
-        lid.email.toLowerCase().includes(zoek)
-    );
+    const zoek = norm(zoekTerm);
+    if (!zoek) return leden;
+
+    return leden.filter((lid) => {
+      return (
+        norm(lid.naam).includes(zoek) ||
+        norm(lid.email).includes(zoek) ||
+        norm(lid.les).includes(zoek) ||
+        norm(lid.les2).includes(zoek)
+      );
+    });
   }, [leden, zoekTerm]);
+
+  const groepen = useMemo(() => groupByLes(gefilterdeLeden), [gefilterdeLeden]);
 
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
 
-  // Verjaardagen vandaag & morgen
+  // Verjaardagen vandaag & morgen (op ALLE leden, niet op filter)
   const { jarigVandaag, jarigMorgen } = useMemo(() => {
     const vandaag = new Date();
     const morgen = new Date();
@@ -179,17 +278,25 @@ export default function LedenPage() {
     };
   }, [leden]);
 
+  const totaalUniek = useMemo(() => {
+    const seen = new Set<string>();
+    for (const l of gefilterdeLeden) {
+      const k = clean(l.id) || clean(l.email) || clean(l.naam);
+      if (k) seen.add(k);
+    }
+    return seen.size;
+  }, [gefilterdeLeden]);
+
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-pink-500 mb-2">Leden</h1>
-      
+        <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
 
         {/* Zoekbalk */}
         <div className="mb-4">
           <input
             type="text"
-            placeholder="Zoek op naam of email..."
+            placeholder="Zoek op naam, email of les..."
             value={zoekTerm}
             onChange={(e) => setZoekTerm(e.target.value)}
             className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
@@ -199,45 +306,66 @@ export default function LedenPage() {
         {loading && <p className="text-gray-400">Laden…</p>}
         {error && <p className="text-red-400">{error}</p>}
 
-        {!loading && !error && gefilterdeLeden.length === 0 && (
+        {!loading && !error && totaalUniek === 0 && (
           <p className="text-gray-400">Geen leden gevonden.</p>
         )}
 
-        {!loading && !error && gefilterdeLeden.length > 0 && (
+        {!loading && !error && totaalUniek > 0 && (
           <>
-            {/* Scroll-lijst met namen */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden mb-3">
-              <div className="px-4 py-2 border-b border-zinc-700 text-sm text-gray-300">
-                {gefilterdeLeden.length} leden
-              </div>
-              <ul className="max-h-64 overflow-y-auto">
-                {gefilterdeLeden.map((lid) => {
-                  const actief = lid.id === geselecteerdId;
-                  return (
-                    <li key={lid.id || lid.email}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGeselecteerdId(lid.id);
-                          setShowModal(true);
-                        }}
-                        className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
-                          actief ? "bg-pink-500/20" : ""
-                        }`}
-                      >
-                        <div className="font-semibold">{lid.naam}</div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {lid.les || lid.les2 || "Geen les ingevuld"}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+            {/* Overzicht */}
+            <div className="text-sm text-gray-300 mb-3">
+              {totaalUniek} leden (gegroepeerd per les)
             </div>
 
-            {/* Verjaardagen onder de lijst */}
-            <div className="space-y-1 mb-4 text-sm">
+            {/* Groepen per les */}
+            <div className="space-y-4">
+              {groepen.map(([lesNaam, lijst]) => (
+                <div
+                  key={lesNaam}
+                  className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden"
+                >
+                  <div className="px-4 py-2 border-b border-zinc-700 flex items-center justify-between">
+                    <div className="font-semibold">{lesNaam}</div>
+                    <div className="text-sm text-gray-300">{lijst.length} leden</div>
+                  </div>
+
+                  <ul className="max-h-64 overflow-y-auto">
+                    {lijst.map((lid) => {
+                      const actief = lid.id === geselecteerdId;
+                      return (
+                        <li key={`${lesNaam}-${lid.id || lid.email || lid.naam}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setGeselecteerdId(lid.id);
+                              setShowModal(true);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
+                              actief ? "bg-pink-500/20" : ""
+                            }`}
+                          >
+                            <div className="font-semibold">{lid.naam}</div>
+                            <div className="text-xs text-gray-400 truncate">
+                              {clean(lid.les) || clean(lid.les2) ? (
+                                <>
+                                  {clean(lid.les) ? `Les: ${lid.les}` : "Les: -"}
+                                  {clean(lid.les2) ? ` • 2e: ${lid.les2}` : ""}
+                                </>
+                              ) : (
+                                "Geen les ingevuld"
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            {/* Verjaardagen onderaan */}
+            <div className="space-y-1 mt-6 text-sm">
               {jarigVandaag.length > 0 && (
                 <p className="text-pink-400">
                   🎉 Vandaag jarig: {jarigVandaag.join(", ")}
@@ -361,19 +489,11 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
           />
 
           <Detail label="Soort" value={lid.soort || "-"} />
-          <Detail
-            label="Toestemming beeldmateriaal"
-            value={lid.toestemming || "-"}
-          />
-          <Detail
-            label="Geboortedatum"
-            value={formatDatum(lid.geboortedatum) || "-"}
-          />
+          <Detail label="Toestemming beeldmateriaal" value={lid.toestemming || "-"} />
+          <Detail label="Geboortedatum" value={formatDatum(lid.geboortedatum) || "-"} />
           <Detail
             label="Adres"
-            value={
-              lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"
-            }
+            value={lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"}
           />
           <Detail
             label="Datum akkoord voorwaarden"
