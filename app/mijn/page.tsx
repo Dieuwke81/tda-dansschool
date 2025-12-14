@@ -37,7 +37,7 @@ export default function MijnPagina() {
 
     async function load() {
       try {
-        // 1) Sessie check
+        // 1) sessie check
         const sres = await fetch("/api/session", {
           cache: "no-store",
           credentials: "same-origin",
@@ -50,13 +50,13 @@ export default function MijnPagina() {
           return;
         }
 
-        // 2) Force wachtwoord wijzigen
+        // 2) force wachtwoord wijzigen
         if (sdata.rol === "lid" && sdata.mustChangePassword === true) {
           router.replace("/wachtwoord");
           return;
         }
 
-        // 3) Haal mijn gegevens op
+        // 3) haal mijn gegevens op
         const res = await fetch("/api/mijn", { cache: "no-store" });
         const d = await res.json().catch(() => null);
 
@@ -68,7 +68,6 @@ export default function MijnPagina() {
           return;
         }
 
-        // ✅ BELANGRIJK: als JSON leeg/kapot is, geen black screen
         if (!d) {
           if (!cancelled) setError("Kon je gegevens niet ophalen (lege response)");
           return;
@@ -91,9 +90,7 @@ export default function MijnPagina() {
   async function uitloggen() {
     try {
       await fetch("/api/logout", { method: "POST" });
-    } catch {
-      // negeren
-    }
+    } catch {}
     router.replace("/login");
   }
 
@@ -116,7 +113,6 @@ export default function MijnPagina() {
     );
   }
 
-  // ✅ nooit meer return null -> altijd iets tonen
   if (!data) {
     return (
       <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
