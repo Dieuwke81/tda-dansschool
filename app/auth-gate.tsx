@@ -4,7 +4,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const PUBLIC_PATHS = ["/login"]; // voeg evt "/hash" etc toe als dat publiek moet zijn
+const PUBLIC_PATHS = ["/login"];
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
@@ -21,35 +21,37 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const [allowed, setAllowed] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [debug, setDebug] = useState("start");
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
 
-    function stopAndRedirect(to: string) {
-      // voorkom "eeuwig" blijven hangen
-      if (!cancelled) {
-        setAllowed(false);
-        setChecking(false);
-        router.replace(to);
-      }
+    function go(to: string, reason: string) {
+      if (cancelled) return;
+      setAllowed(false);
+      setChecking(true);
+      setDebug(`redirect -> ${to} (${reason})`);
+      router.replace(to);
     }
 
     async function checkSession() {
-      // reset bij elke route change
-      if (!cancelled) {
-        setAllowed(false);
-        setChecking(true);
-      }
+      if (cancelled) return;
 
-      // Publieke routes altijd toestaan
+      setAllowed(false);
+      setChecking(true);
+      setDebug(`checking pathname=${pathname}`);
+
+      // Publiek
       if (PUBLIC_PATHS.includes(pathname)) {
-        if (!cancelled) {
-          setAllowed(true);
-          setChecking(false);
-        }
+        setAllowed(true);
+        setChecking(false);
+        setDebug("public path allowed");
         return;
       }
+
+      // timeout: nooit eindeloos “controleren”
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
       try {
         const res = await fetch("/api/session", {
@@ -58,42 +60,54 @@ export function AuthGate({ children }: { children: ReactNode }) {
           signal: controller.signal,
         });
 
+        const text = await res.text();
+        clearTimeout(timeout);
+
         if (!res.ok) {
-          stopAndRedirect("/login");
+          go("/login", `session status=${res.status} body=${text.slice(0, 120)}`);
           return;
         }
 
-        const data = (await res.json().catch(() => null)) as SessionResponse | null;
+        let data: SessionResponse | null = null;
+        try {
+          data = JSON.parse(text) as SessionResponse;
+        } catch {
+          go("/login", `session not json: ${text.slice(0, 120)}`);
+          return;
+        }
 
         if (!data?.loggedIn || !data?.rol) {
-          stopAndRedirect("/login");
+          go("/login", `not logged in (loggedIn=${String(data?.loggedIn)})`);
           return;
         }
 
         const isLid = data.rol === "lid";
         const must = data.mustChangePassword === true;
 
-        // 1) Lid moet wachtwoord wijzigen -> force naar /wachtwoord
+        // lid moet wijzigen -> altijd naar /wachtwoord
         if (isLid && must && pathname !== "/wachtwoord") {
-          stopAndRedirect("/wachtwoord");
+          go("/wachtwoord", `mustChangePassword true for ${data.username ?? "-"}`);
           return;
         }
 
-        // 2) Lid hoeft niet te wijzigen maar zit nog op /wachtwoord -> terug naar /mijn
+        // lid hoeft niet te wijzigen maar zit op /wachtwoord -> naar /mijn
         if (isLid && !must && pathname === "/wachtwoord") {
-          stopAndRedirect("/mijn");
+          go("/mijn", "mustChangePassword false, leaving /wachtwoord");
           return;
         }
 
-        // Alles ok -> pagina tonen
-        if (!cancelled) setAllowed(true);
-      } catch {
-        // bij fetch errors (of abort) niet blijven hangen
-        if (!cancelled) {
-          // Als dit een abort is door route change: niet naar login knallen
-          // (maar gewoon stoppen met checken en wachten op nieuwe effect-run)
-          setAllowed(false);
+        setAllowed(true);
+        setDebug(`allowed (rol=${data.rol}, user=${data.username ?? "-"})`);
+      } catch (e: any) {
+        clearTimeout(timeout);
+
+        // Als dit abort was door timeout, stuur naar login met reden
+        if (e?.name === "AbortError") {
+          go("/login", "session fetch timeout/abort");
+          return;
         }
+
+        go("/login", `session fetch error: ${String(e?.message || e)}`);
       } finally {
         if (!cancelled) setChecking(false);
       }
@@ -107,15 +121,34 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, [pathname, router]);
 
+  // ✅ Nooit meer zwart scherm
   if (checking) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-gray-300">Bezig met controleren…</p>
+      <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+        <p className="text-gray-300 mb-3">Bezig met controleren…</p>
+        <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto">
+          {debug}
+        </pre>
       </main>
     );
   }
 
-  if (!allowed) return null;
+  if (!allowed) {
+    return (
+      <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+        <p className="text-gray-300 mb-3">Toegang geblokkeerd (nog niet toegestaan).</p>
+        <pre className="w-full max-w-xl text-left text-xs text-gray-300 bg-black/40 border border-zinc-800 rounded-lg p-3 overflow-auto">
+          {debug}
+        </pre>
+        <button
+          className="mt-4 text-gray-400 underline text-sm"
+          onClick={() => router.replace("/login")}
+        >
+          Naar login
+        </button>
+      </main>
+    );
+  }
 
   return <>{children}</>;
 }
