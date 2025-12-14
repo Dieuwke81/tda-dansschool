@@ -34,14 +34,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ AuthGate UIT op /wachtwoord, zodat je nooit in een redirect-loop komt
-  const h = headers();
-  const pathname = h.get("x-invoke-path") || h.get("next-url") || "";
+  // ✅ headers() is async in jouw versie
+  const h = await headers();
+
+  // ✅ Gebruik je eigen header uit middleware (x-pathname)
+  const pathname = h.get("x-pathname") || "";
   const noAuthGate = pathname.startsWith("/wachtwoord");
 
   return (
