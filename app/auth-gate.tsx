@@ -84,9 +84,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
         const isLid = data.rol === "lid";
         const must = data.mustChangePassword === true;
 
-        // lid moet wijzigen -> altijd naar /wachtwoord
-        if (isLid && must && pathname !== "/wachtwoord") {
-          go("/wachtwoord", `mustChangePassword true for ${data.username ?? "-"}`);
+        // ============================
+        // ✅ FIX: voorkom redirect-loop
+        // ============================
+        // Als lid MOET wijzigen:
+        // - zit je NIET op /wachtwoord -> redirect naar /wachtwoord
+        // - zit je WEL op /wachtwoord -> laat de pagina juist renderen
+        if (isLid && must) {
+          if (pathname !== "/wachtwoord") {
+            go("/wachtwoord", `mustChangePassword true for ${data.username ?? "-"}`);
+            return;
+          }
+
+          // ✅ hier dus NIET redirecten, gewoon toestaan
+          setAllowed(true);
+          setDebug(`allowed on /wachtwoord (mustChangePassword=true for ${data.username ?? "-"})`);
           return;
         }
 
@@ -101,7 +113,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
       } catch (e: any) {
         clearTimeout(timeout);
 
-        // Als dit abort was door timeout, stuur naar login met reden
         if (e?.name === "AbortError") {
           go("/login", "session fetch timeout/abort");
           return;
