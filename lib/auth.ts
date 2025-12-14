@@ -14,14 +14,12 @@ const key = new TextEncoder().encode(secret);
 
 export type SessionPayload = {
   rol: Rol;
-  username?: string; // ✅ nodig voor /mijn
-
-  // ✅ nieuw: bij eerste login verplicht wijzigen
-  mustChangePassword?: boolean;
+  username?: string;            // nodig voor /mijn
+  mustChangePassword?: boolean; // ✅ nodig voor /wachtwoord flow
 };
 
 export async function signSession(payload: SessionPayload) {
-  return await new SignJWT(payload)
+  return await new SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
