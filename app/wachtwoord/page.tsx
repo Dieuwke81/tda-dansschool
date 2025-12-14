@@ -21,13 +21,31 @@ function Inner() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // simpele client-side checks (scheelt gedoe)
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError("Vul alle velden in.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError("Nieuw wachtwoord moet minimaal 8 tekens zijn.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("Nieuwe wachtwoorden komen niet overeen.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const r = await fetch("/api/wachtwoord", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
+        cache: "no-store",
+        credentials: "include", // ✅ belangrijk
         body: JSON.stringify({
           currentPassword,
           newPassword,
@@ -39,11 +57,12 @@ function Inner() {
 
       if (!r.ok) {
         setError(d?.error || "Kon wachtwoord niet wijzigen");
-        setLoading(false);
         return;
       }
 
+      // succes -> naar mijn + refresh (zorgt dat sessie up-to-date is)
       router.replace("/mijn");
+      router.refresh();
     } catch {
       setError("Kon wachtwoord niet wijzigen");
     } finally {
@@ -88,6 +107,7 @@ function Inner() {
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"
             />
+            <p className="text-xs text-gray-400 mt-1">Minimaal 8 tekens.</p>
           </div>
 
           <div>
