@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
@@ -20,6 +20,7 @@ type SessionResponse = {
 export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   const [magTonen, setMagTonen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
@@ -45,8 +46,12 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
           return;
         }
 
-        // 🔥 DIT IS DE MISSENDE SCHAKEL
-        if (data.rol === "lid" && data.mustChangePassword === true) {
+        // ✅ Forceer wachtwoord wijzigen voor leden, maar NIET als je al op /wachtwoord zit
+        if (
+          data.rol === "lid" &&
+          data.mustChangePassword === true &&
+          pathname !== "/wachtwoord"
+        ) {
           router.replace("/wachtwoord");
           return;
         }
@@ -61,7 +66,7 @@ export default function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
     return () => {
       cancelled = true;
     };
-  }, [router, allowedRoles]);
+  }, [router, allowedRoles, pathname]);
 
   if (!magTonen) {
     return (
