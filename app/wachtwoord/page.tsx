@@ -1,11 +1,20 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+type SessionResponse = {
+  loggedIn?: boolean;
+  rol?: "eigenaar" | "docent" | "gast" | "lid";
+  username?: string;
+  mustChangePassword?: boolean;
+};
 
 export default function WachtwoordPage() {
   const router = useRouter();
+
+  const [checking, setChecking] = useState(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -13,6 +22,53 @@ export default function WachtwoordPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ✅ Zorgt dat je alleen hier komt als je:
+  // - ingelogd bent
+  // - rol = lid
+  // - mustChangePassword = true
+  useEffect(() => {
+    let cancelled = false;
+
+    async function check() {
+      setChecking(true);
+      setError(null);
+
+      try {
+        const res = await fetch("/api/session", {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        const data = (await res.json().catch(() => null)) as SessionResponse | null;
+
+        if (!res.ok || !data?.loggedIn) {
+          router.replace("/login");
+          return;
+        }
+
+        if (data.rol !== "lid") {
+          router.replace("/login");
+          return;
+        }
+
+        // Als hij niet meer hoeft te wijzigen -> terug naar /mijn
+        if (data.mustChangePassword !== true) {
+          router.replace("/mijn");
+          return;
+        }
+
+        if (!cancelled) setChecking(false);
+      } catch {
+        router.replace("/login");
+      }
+    }
+
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,11 +91,11 @@ export default function WachtwoordPage() {
 
       if (!r.ok) {
         setError(d?.error || "Kon wachtwoord niet wijzigen");
-        setLoading(false);
         return;
       }
 
       router.replace("/mijn");
+      router.refresh();
     } catch {
       setError("Kon wachtwoord niet wijzigen");
     } finally {
@@ -47,12 +103,18 @@ export default function WachtwoordPage() {
     }
   }
 
+  if (checking) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <p className="text-gray-300">Even controleren…</p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-zinc-900 rounded-xl p-6 border border-zinc-700">
-        <h1 className="text-2xl font-bold text-pink-500 mb-2">
-          Wachtwoord wijzigen
-        </h1>
+        <h1 className="text-2xl font-bold text-pink-500 mb-2">Wachtwoord wijzigen</h1>
 
         <p className="text-sm text-gray-300 mb-6">
           Dit is je eerste keer inloggen. Kies nu een nieuw wachtwoord.
@@ -62,9 +124,7 @@ export default function WachtwoordPage() {
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-300 mb-1">
-              Huidig wachtwoord
-            </label>
+            <label className="block text-sm text-gray-300 mb-1">Huidig wachtwoord</label>
             <input
               type="password"
               className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
@@ -75,9 +135,7 @@ export default function WachtwoordPage() {
           </div>
 
           <div>
-            <label className="block text-sm text-gray-300 mb-1">
-              Nieuw wachtwoord
-            </label>
+            <label className="block text-sm text-gray-300 mb-1">Nieuw wachtwoord</label>
             <input
               type="password"
               className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
@@ -85,12 +143,11 @@ export default function WachtwoordPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"
             />
+            <p className="text-xs text-gray-400 mt-1">Minimaal 8 tekens.</p>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-300 mb-1">
-              Herhaal nieuw wachtwoord
-            </label>
+            <label className="block text-sm text-gray-300 mb-1">Herhaal nieuw wachtwoord</label>
             <input
               type="password"
               className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
