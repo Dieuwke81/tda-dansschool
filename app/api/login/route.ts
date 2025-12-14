@@ -24,6 +24,7 @@ function h(s: unknown) {
 }
 
 type Owner = { u: string; p: string };
+type Docent = { u: string; p: string };
 
 function parseOwners(env?: string): Owner[] {
   if (!env) return [];
@@ -31,7 +32,18 @@ function parseOwners(env?: string): Owner[] {
     .split(",")
     .map((pair) => pair.split(":"))
     .filter((x) => x.length === 2)
-    .map(([u, p]) => ({ u: u.trim(), p: p.trim() }));
+    .map(([u, p]) => ({ u: u.trim(), p: p.trim() }))
+    .filter((x) => x.u && x.p);
+}
+
+function parseDocents(env?: string): Docent[] {
+  if (!env) return [];
+  return env
+    .split(",")
+    .map((pair) => pair.split(":"))
+    .filter((x) => x.length === 2)
+    .map(([u, p]) => ({ u: u.trim(), p: p.trim() }))
+    .filter((x) => x.u && x.p);
 }
 
 // simpele CSV parser (werkt ook met komma’s in quotes)
@@ -85,10 +97,7 @@ export async function POST(req: NextRequest) {
     usernameInput = clean(body?.username);
     wachtwoord = String(body?.wachtwoord ?? "");
   } catch {
-    return NextResponse.json(
-      { success: false, error: "Ongeldige invoer" },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, error: "Ongeldige invoer" }, { status: 400 });
   }
 
   if (!usernameInput || !wachtwoord) {
@@ -108,10 +117,7 @@ export async function POST(req: NextRequest) {
   if (owner) {
     const ok = await bcrypt.compare(wachtwoord, owner.p);
     if (!ok) {
-      return NextResponse.json(
-        { success: false, error: "Onjuiste inloggegevens" },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
     }
 
     const token = await signSession({
@@ -132,14 +138,41 @@ export async function POST(req: NextRequest) {
   }
 
   // ===========
+  // DOCENT (via env) - verwacht bcrypt hash in env
+  // DOCENTS="Tatjana:<bcryptHash>,Dieuwke:<bcryptHash>"
+  // ===========
+  const docents = parseDocents(process.env.DOCENTS);
+  const docent = docents.find((d) => norm(d.u) === norm(usernameInput));
+
+  if (docent) {
+    const ok = await bcrypt.compare(wachtwoord, docent.p);
+    if (!ok) {
+      return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
+    }
+
+    const token = await signSession({
+      rol: "docent",
+      username: clean(docent.u),
+      mustChangePassword: false,
+    });
+
+    const res = NextResponse.json({ success: true, rol: "docent", mustChangePassword: false });
+    res.cookies.set(cookieName, token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return res;
+  }
+
+  // ===========
   // LID (Sheet)
   // ===========
   const sheetUrl = process.env.SHEET_URL;
   if (!sheetUrl) {
-    return NextResponse.json(
-      { success: false, error: "SHEET_URL ontbreekt" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "SHEET_URL ontbreekt" }, { status: 500 });
   }
 
   let csv = "";
@@ -148,18 +181,12 @@ export async function POST(req: NextRequest) {
     if (!r.ok) throw new Error("Sheet niet bereikbaar");
     csv = await r.text();
   } catch {
-    return NextResponse.json(
-      { success: false, error: "Kon sheet niet ophalen" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Kon sheet niet ophalen" }, { status: 500 });
   }
 
   const lines = csv.trim().split("\n");
   if (lines.length < 2) {
-    return NextResponse.json(
-      { success: false, error: "Sheet is leeg" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Sheet is leeg" }, { status: 500 });
   }
 
   const header = parseCsvLine(lines[0]);
@@ -180,35 +207,23 @@ export async function POST(req: NextRequest) {
   }
 
   const uNorm = norm(usernameInput);
-
   const rows = lines.slice(1);
-  const row = rows
-    .map(parseCsvLine)
-    .find((c) => norm(c[iUsername]) === uNorm);
+  const row = rows.map(parseCsvLine).find((c) => norm(c[iUsername]) === uNorm);
 
   if (!row) {
-    return NextResponse.json(
-      { success: false, error: "Onjuiste inloggegevens" },
-      { status: 401 }
-    );
+    return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
   }
 
   const sheetUsername = clean(row[iUsername]);
   const hash = clean(row[iHash]);
 
   if (!hash) {
-    return NextResponse.json(
-      { success: false, error: "Nog geen wachtwoord ingesteld" },
-      { status: 403 }
-    );
+    return NextResponse.json({ success: false, error: "Nog geen wachtwoord ingesteld" }, { status: 403 });
   }
 
   const ok = await bcrypt.compare(wachtwoord, hash);
   if (!ok) {
-    return NextResponse.json(
-      { success: false, error: "Onjuiste inloggegevens" },
-      { status: 401 }
-    );
+    return NextResponse.json({ success: false, error: "Onjuiste inloggegevens" }, { status: 401 });
   }
 
   const mustChangePassword = isJa(row[iMust]);
@@ -219,11 +234,7 @@ export async function POST(req: NextRequest) {
     mustChangePassword,
   });
 
-  const res = NextResponse.json({
-    success: true,
-    rol: "lid",
-    mustChangePassword,
-  });
+  const res = NextResponse.json({ success: true, rol: "lid", mustChangePassword });
 
   res.cookies.set(cookieName, token, {
     httpOnly: true,
