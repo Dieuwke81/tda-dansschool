@@ -5,7 +5,6 @@ import { signSession, cookieName } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-// Netjes opschonen voor opslaan
 function clean(s: unknown) {
   return String(s ?? "").trim();
 }
@@ -17,6 +16,11 @@ function norm(s: unknown) {
     .trim()
     .replace(/\s+/g, " ") // meerdere spaties -> 1
     .toLowerCase();
+}
+
+// normaliseer header namen (spaties/case stabiel)
+function h(s: unknown) {
+  return clean(s).toLowerCase().replace(/\s+/g, " ");
 }
 
 type Owner = { u: string; p: string };
@@ -67,6 +71,11 @@ function isJa(v: unknown) {
   return x === "ja" || x === "true" || x === "1" || x === "yes";
 }
 
+function idx(map: Record<string, number>, headerName: string) {
+  const i = map[h(headerName)];
+  return typeof i === "number" ? i : -1;
+}
+
 export async function POST(req: NextRequest) {
   let usernameInput = "";
   let wachtwoord = "";
@@ -90,7 +99,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ===========
-  // EIGENAAR (via env)
+  // EIGENAAR (via env) - verwacht bcrypt hash in env
+  // OWNERS="Dieuwke:<bcryptHash>,Tatjana:<bcryptHash>"
   // ===========
   const owners = parseOwners(process.env.OWNERS);
   const owner = owners.find((o) => norm(o.u) === norm(usernameInput));
@@ -99,7 +109,7 @@ export async function POST(req: NextRequest) {
     const ok = await bcrypt.compare(wachtwoord, owner.p);
     if (!ok) {
       return NextResponse.json(
-        { success: false, error: "DEBUG: eigenaar wachtwoord klopt niet" },
+        { success: false, error: "Onjuiste inloggegevens" },
         { status: 401 }
       );
     }
@@ -110,7 +120,7 @@ export async function POST(req: NextRequest) {
       mustChangePassword: false,
     });
 
-    const res = NextResponse.json({ success: true, rol: "eigenaar" });
+    const res = NextResponse.json({ success: true, rol: "eigenaar", mustChangePassword: false });
     res.cookies.set(cookieName, token, {
       httpOnly: true,
       secure: true,
@@ -145,26 +155,47 @@ export async function POST(req: NextRequest) {
   }
 
   const lines = csv.trim().split("\n");
-  const [, ...rows] = lines;
+  if (lines.length < 2) {
+    return NextResponse.json(
+      { success: false, error: "Sheet is leeg" },
+      { status: 500 }
+    );
+  }
+
+  const header = parseCsvLine(lines[0]);
+  const map: Record<string, number> = {};
+  header.forEach((name, i) => {
+    map[h(name)] = i;
+  });
+
+  const iUsername = idx(map, "username");
+  const iHash = idx(map, "password_hash");
+  const iMust = idx(map, "moet_wachtwoord_wijzigen");
+
+  if (iUsername === -1 || iHash === -1 || iMust === -1) {
+    return NextResponse.json(
+      { success: false, error: "Sheet kolommen missen (username/password_hash/moet_wachtwoord_wijzigen)" },
+      { status: 500 }
+    );
+  }
 
   const uNorm = norm(usernameInput);
 
-  // O=14 username, P=15 hash, Q=16 mustChange
+  const rows = lines.slice(1);
   const row = rows
     .map(parseCsvLine)
-    .find((c) => norm(c[14]) === uNorm);
+    .find((c) => norm(c[iUsername]) === uNorm);
 
   if (!row) {
     return NextResponse.json(
-      { success: false, error: "DEBUG: username niet gevonden in sheet (kolom O)" },
+      { success: false, error: "Onjuiste inloggegevens" },
       { status: 401 }
     );
   }
 
-  // Neem de username exact uit de sheet mee (voorkomt rare whitespace issues in sessie)
-  const sheetUsername = clean(row[14]);
+  const sheetUsername = clean(row[iUsername]);
+  const hash = clean(row[iHash]);
 
-  const hash = clean(row[15]); // P
   if (!hash) {
     return NextResponse.json(
       { success: false, error: "Nog geen wachtwoord ingesteld" },
@@ -175,12 +206,12 @@ export async function POST(req: NextRequest) {
   const ok = await bcrypt.compare(wachtwoord, hash);
   if (!ok) {
     return NextResponse.json(
-      { success: false, error: "DEBUG: lid wachtwoord klopt niet (bcrypt compare fail)" },
+      { success: false, error: "Onjuiste inloggegevens" },
       { status: 401 }
     );
   }
 
-  const mustChangePassword = isJa(row[16]); // Q
+  const mustChangePassword = isJa(row[iMust]);
 
   const token = await signSession({
     rol: "lid",
