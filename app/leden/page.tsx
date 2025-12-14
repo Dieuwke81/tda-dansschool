@@ -120,20 +120,21 @@ function getDagMaand(raw: string): { dag: number; maand: number } | null {
   return { dag: d, maand: m };
 }
 
-// ✅ Groepeer per les (les + les2), met unieke leden per groep
-function groupByLes(leden: Lid[]) {
+/**
+ * ✅ Groepeer per les, maar: elk lid komt in EXACT 1 groep.
+ * - Als lid.les2 bestaat, dan is dat de groep (voor docenten is dit precies wat je wil)
+ * - Anders lid.les
+ *
+ * Hierdoor komen leden die "Dansmix" als 1e les hebben maar "Streetdance" als 2e les
+ * gewoon in de Streetdance-groep te staan.
+ */
+function groupByLesSingle(leden: Lid[]) {
   const groups = new Map<string, Lid[]>();
 
-  function add(lesNaam: string, lid: Lid) {
-    const key = clean(lesNaam);
-    if (!key) return;
+  for (const lid of leden) {
+    const key = clean(lid.les2) || clean(lid.les) || "Geen les";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(lid);
-  }
-
-  for (const lid of leden) {
-    add(lid.les, lid);
-    add(lid.les2, lid);
   }
 
   const sorted = Array.from(groups.entries())
@@ -175,7 +176,10 @@ export default function LedenPage() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch("/api/leden", { cache: "no-store", credentials: "include" });
+        const res = await fetch("/api/leden", {
+          cache: "no-store",
+          credentials: "include",
+        });
         if (!res.ok) {
           throw new Error("Kon de ledenlijst niet ophalen");
         }
@@ -195,10 +199,6 @@ export default function LedenPage() {
           .map((line) => {
             const c = parseCsvLine(line);
 
-            // Kolommen:
-            // A=id, B=naam, C=email, D=les, E=2e les, F=soort,
-            // G=toestemming, H=tel1, I=tel2, J=geboortedatum, K=adres,
-            // L=postcode, M=plaats, N=datum goedkeuring
             return {
               id: c[0] ?? "",
               naam: c[1] ?? "",
@@ -243,7 +243,8 @@ export default function LedenPage() {
     });
   }, [leden, zoekTerm]);
 
-  const groepen = useMemo(() => groupByLes(gefilterdeLeden), [gefilterdeLeden]);
+  // ✅ nieuwe groepering: elk lid in precies 1 groep
+  const groepen = useMemo(() => groupByLesSingle(gefilterdeLeden), [gefilterdeLeden]);
 
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
