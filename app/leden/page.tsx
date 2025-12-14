@@ -135,20 +135,28 @@ function getDagMaand(raw: string): { dag: number; maand: number } | null {
 
 /**
  * ✅ DOCENT:
- * /api/leden levert al alleen leden terug van de lessen van deze docent.
+ * /api/leden filtert al op docent-lessen, maar een lid kan nog 2 lessen hebben.
  * We zetten elk lid daarom in EXACT 1 groep:
- * - als les gevuld is -> die groep
- * - anders als les2 gevuld is -> die groep
- * (geen "les2 voorrang", maar gewoon "gebruik de les die er daadwerkelijk staat")
+ * - Als les matcht met docent-lessen -> groep = les
+ * - Anders als les2 matcht -> groep = les2
+ * - Anders fallback: les || les2 || "Geen les"
  */
-function groupByLesSingle(leden: Lid[]) {
+function groupByLesForDocent(leden: Lid[], allowedLessons: Set<string>) {
   const groups = new Map<string, Lid[]>();
 
   for (const lid of leden) {
     const les1 = clean(lid.les);
     const les2 = clean(lid.les2);
 
-    const key = les1 || les2 || "Geen les";
+    const n1 = norm(les1);
+    const n2 = norm(les2);
+
+    const key =
+      (les1 && allowedLessons.has(n1) ? les1 : "") ||
+      (les2 && allowedLessons.has(n2) ? les2 : "") ||
+      les1 ||
+      les2 ||
+      "Geen les";
 
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(lid);
@@ -211,6 +219,9 @@ export default function LedenPage() {
   // ✅ rol ophalen om owner/docent weergave te kiezen
   const [rol, setRol] = useState<Rol>("docent");
 
+  // ✅ docent-lessen ophalen voor juiste groepering (Tatjana -> Streetdance dinsdag etc.)
+  const [allowedLessons, setAllowedLessons] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     let cancelled = false;
 
@@ -219,16 +230,41 @@ export default function LedenPage() {
         setLoading(true);
         setError(null);
 
-        // 1) rol ophalen (mag falen, default blijft docent)
+        // 1) rol ophalen
+        let currentRol: Rol = "docent";
         try {
           const s = await fetch("/api/session", {
             cache: "no-store",
             credentials: "include",
           });
           const d = (await s.json().catch(() => null)) as SessionResponse | null;
-          if (!cancelled && s.ok && d?.loggedIn && d?.rol) setRol(d.rol);
+
+          if (!cancelled && s.ok && d?.loggedIn && d?.rol) {
+            currentRol = d.rol;
+            setRol(d.rol);
+          }
         } catch {
           // ignore
+        }
+
+        // 1b) docent-lessen ophalen (alleen nodig voor docent)
+        if (currentRol === "docent") {
+          try {
+            const rr = await fetch("/api/docent-lessen", {
+              cache: "no-store",
+              credentials: "include",
+            });
+            const jj = await rr.json().catch(() => null);
+            const lessons = Array.isArray(jj?.lessons) ? jj.lessons : [];
+
+            if (!cancelled) {
+              setAllowedLessons(new Set(lessons.map((x: any) => norm(x))));
+            }
+          } catch {
+            if (!cancelled) setAllowedLessons(new Set());
+          }
+        } else {
+          if (!cancelled) setAllowedLessons(new Set());
         }
 
         // 2) leden ophalen
@@ -301,10 +337,11 @@ export default function LedenPage() {
   }, [leden, zoekTerm]);
 
   const groepen = useMemo(() => {
-    return rol === "eigenaar"
-      ? groupByLesBoth(gefilterdeLeden)
-      : groupByLesSingle(gefilterdeLeden);
-  }, [gefilterdeLeden, rol]);
+    if (rol === "eigenaar") return groupByLesBoth(gefilterdeLeden);
+
+    // docent: als allowedLessons leeg is, vallen we terug op "les||les2"
+    return groupByLesForDocent(gefilterdeLeden, allowedLessons);
+  }, [gefilterdeLeden, rol, allowedLessons]);
 
   const geselecteerdLid =
     gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
@@ -565,3 +602,4 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
     </div>
   );
 }
+```0
