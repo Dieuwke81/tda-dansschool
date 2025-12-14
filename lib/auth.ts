@@ -7,15 +7,13 @@ const COOKIE_NAME = "tda_session";
 export const cookieName = COOKIE_NAME;
 
 const secret = process.env.AUTH_SECRET;
-if (!secret) {
-  throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel)");
-}
+if (!secret) throw new Error("AUTH_SECRET ontbreekt (zet deze in Vercel)");
 const key = new TextEncoder().encode(secret);
 
 export type SessionPayload = {
   rol: Rol;
-  username?: string;            // nodig voor /mijn
-  mustChangePassword?: boolean; // ✅ nodig voor /wachtwoord flow
+  username?: string;
+  mustChangePassword?: boolean; // ✅
 };
 
 export async function signSession(payload: SessionPayload) {
