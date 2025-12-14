@@ -5,10 +5,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function WachtwoordPage() {
-  return <Inner />;
-}
-
-function Inner() {
   const router = useRouter();
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -21,31 +17,13 @@ function Inner() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
-    // simpele client-side checks (scheelt gedoe)
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setError("Vul alle velden in.");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setError("Nieuw wachtwoord moet minimaal 8 tekens zijn.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError("Nieuwe wachtwoorden komen niet overeen.");
-      return;
-    }
-
     setLoading(true);
 
     try {
       const r = await fetch("/api/wachtwoord", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        credentials: "include", // ✅ belangrijk
+        credentials: "include",
         body: JSON.stringify({
           currentPassword,
           newPassword,
@@ -57,12 +35,11 @@ function Inner() {
 
       if (!r.ok) {
         setError(d?.error || "Kon wachtwoord niet wijzigen");
+        setLoading(false);
         return;
       }
 
-      // succes -> naar mijn + refresh (zorgt dat sessie up-to-date is)
       router.replace("/mijn");
-      router.refresh();
     } catch {
       setError("Kon wachtwoord niet wijzigen");
     } finally {
@@ -76,6 +53,7 @@ function Inner() {
         <h1 className="text-2xl font-bold text-pink-500 mb-2">
           Wachtwoord wijzigen
         </h1>
+
         <p className="text-sm text-gray-300 mb-6">
           Dit is je eerste keer inloggen. Kies nu een nieuw wachtwoord.
         </p>
@@ -88,8 +66,8 @@ function Inner() {
               Huidig wachtwoord
             </label>
             <input
-              className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
               type="password"
+              className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
@@ -101,13 +79,12 @@ function Inner() {
               Nieuw wachtwoord
             </label>
             <input
-              className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
               type="password"
+              className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"
             />
-            <p className="text-xs text-gray-400 mt-1">Minimaal 8 tekens.</p>
           </div>
 
           <div>
@@ -115,8 +92,8 @@ function Inner() {
               Herhaal nieuw wachtwoord
             </label>
             <input
-              className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
               type="password"
+              className="w-full rounded-lg bg-black/40 border border-zinc-700 p-3 text-white"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
