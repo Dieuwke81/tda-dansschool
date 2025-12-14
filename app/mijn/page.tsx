@@ -19,6 +19,13 @@ type MijnData = {
   plaats: string;
 };
 
+type SessionResponse = {
+  loggedIn?: boolean;
+  rol?: "eigenaar" | "docent" | "gast" | "lid";
+  username?: string;
+  mustChangePassword?: boolean;
+};
+
 export default function MijnPagina() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -30,6 +37,26 @@ export default function MijnPagina() {
 
     async function load() {
       try {
+        // 1) Check sessie
+        const sres = await fetch("/api/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+
+        const sdata = (await sres.json().catch(() => null)) as SessionResponse | null;
+
+        if (!sres.ok || !sdata?.loggedIn || !sdata?.rol) {
+          router.replace("/login");
+          return;
+        }
+
+        // 2) Force wachtwoord wijzigen voor leden
+        if (sdata.rol === "lid" && sdata.mustChangePassword === true) {
+          router.replace("/wachtwoord");
+          return;
+        }
+
+        // 3) Pas daarna: haal mijn gegevens op
         const res = await fetch("/api/mijn", { cache: "no-store" });
         const d = await res.json().catch(() => null);
 
