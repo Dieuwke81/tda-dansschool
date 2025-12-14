@@ -1,6 +1,8 @@
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthGate } from "./auth-gate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -43,10 +45,9 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
         <link rel="apple-touch-icon" href="/android-chrome-512x512.png" />
       </head>
-      <body
-        className={`${inter.variable} antialiased bg-black text-white`}
-      >
-        {children}
+
+      <body className={`${inter.variable} antialiased bg-black text-white`}>
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
