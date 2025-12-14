@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthGate } from "./auth-gate";
+import { headers } from "next/headers";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -38,6 +39,11 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // ✅ AuthGate UIT op /wachtwoord, zodat je nooit in een redirect-loop komt
+  const h = headers();
+  const pathname = h.get("x-invoke-path") || h.get("next-url") || "";
+  const noAuthGate = pathname.startsWith("/wachtwoord");
+
   return (
     <html lang="nl">
       <head>
@@ -47,7 +53,7 @@ export default function RootLayout({
       </head>
 
       <body className={`${inter.variable} antialiased bg-black text-white`}>
-        <AuthGate>{children}</AuthGate>
+        {noAuthGate ? children : <AuthGate>{children}</AuthGate>}
       </body>
     </html>
   );
