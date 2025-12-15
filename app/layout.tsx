@@ -1,13 +1,18 @@
 
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { AuthGate } from "./auth-gate";
-import { headers } from "next/headers";
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
 });
 
 export const metadata: Metadata = {
@@ -34,18 +39,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  // ✅ headers() is async in jouw versie
-  const h = await headers();
-
-  // ✅ Gebruik je eigen header uit middleware (x-pathname)
-  const pathname = h.get("x-pathname") || "";
-  const noAuthGate = pathname.startsWith("/wachtwoord");
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="nl">
       <head>
@@ -54,8 +48,10 @@ export default async function RootLayout({
         <link rel="apple-touch-icon" href="/android-chrome-512x512.png" />
       </head>
 
-      <body className={`${inter.variable} antialiased bg-black text-white`}>
-        {noAuthGate ? children : <AuthGate>{children}</AuthGate>}
+      <body
+        className={`${inter.variable} ${poppins.variable} antialiased bg-black text-white font-sans`}
+      >
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
