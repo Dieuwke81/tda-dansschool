@@ -234,6 +234,19 @@ function countSoorten(lijst: Lid[]) {
   return { abonnement, rittenkaart, overig, totaal: lijst.length };
 }
 
+/* ---------- STIJL: REGENBOOG KAARTKLEUREN ---------- */
+/** Zachte, subtiele rainbow op volgorde. */
+const rainbowCard = [
+  { bg: "bg-rose-500/8", border: "border-rose-400/30", ring: "ring-rose-300/25", glow: "shadow-[0_0_28px_rgba(244,63,94,0.18)]" },
+  { bg: "bg-orange-500/8", border: "border-orange-400/30", ring: "ring-orange-300/25", glow: "shadow-[0_0_28px_rgba(249,115,22,0.18)]" },
+  { bg: "bg-amber-500/8", border: "border-amber-400/30", ring: "ring-amber-300/25", glow: "shadow-[0_0_28px_rgba(245,158,11,0.18)]" },
+  { bg: "bg-lime-500/8", border: "border-lime-400/30", ring: "ring-lime-300/25", glow: "shadow-[0_0_28px_rgba(163,230,53,0.16)]" },
+  { bg: "bg-emerald-500/8", border: "border-emerald-400/30", ring: "ring-emerald-300/25", glow: "shadow-[0_0_28px_rgba(16,185,129,0.16)]" },
+  { bg: "bg-sky-500/8", border: "border-sky-400/30", ring: "ring-sky-300/25", glow: "shadow-[0_0_28px_rgba(14,165,233,0.16)]" },
+  { bg: "bg-indigo-500/8", border: "border-indigo-400/30", ring: "ring-indigo-300/25", glow: "shadow-[0_0_28px_rgba(99,102,241,0.16)]" },
+  { bg: "bg-violet-500/8", border: "border-violet-400/30", ring: "ring-violet-300/25", glow: "shadow-[0_0_28px_rgba(139,92,246,0.16)]" },
+] as const;
+
 /* ---------------------------------- */
 
 export default function LedenPage() {
@@ -409,27 +422,36 @@ export default function LedenPage() {
         {loading && <p className="text-gray-400">Laden…</p>}
         {error && <p className="text-red-400">{error}</p>}
 
-        {!loading && !error && totaalUniek === 0 && (
-          <p className="text-gray-400">Geen leden gevonden.</p>
-        )}
+        {!loading && !error && totaalUniek === 0 && <p className="text-gray-400">Geen leden gevonden.</p>}
 
         {!loading && !error && totaalUniek > 0 && (
           <>
-            <div className="text-sm text-gray-300 mb-3">
-              {totaalUniek} leden (gegroepeerd per les)
-            </div>
+            <div className="text-sm text-gray-300 mb-3">{totaalUniek} leden (gegroepeerd per les)</div>
 
             <div className="space-y-4">
-              {groepen.map(([lesNaam, lijst]) => {
+              {groepen.map(([lesNaam, lijst], index) => {
                 const c = countSoorten(lijst);
+                const palette = rainbowCard[index % rainbowCard.length];
+
+                // ✅ Actief als je één van deze leden open/gekozen hebt
+                const isActive = geselecteerdId
+                  ? lijst.some((l) => clean(l.id) === clean(geselecteerdId))
+                  : false;
 
                 return (
                   <div
                     key={lesNaam}
-                    className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden"
+                    className={[
+                      "rounded-2xl overflow-hidden border transition-all",
+                      palette.bg,
+                      palette.border,
+                      isActive
+                        ? `ring-1 ${palette.ring} ${palette.glow} brightness-[1.08]`
+                        : "shadow-md hover:brightness-[1.03]",
+                    ].join(" ")}
                   >
                     {/* ✅ TELLING ONDER TITEL */}
-                    <div className="px-4 py-2 border-b border-zinc-700">
+                    <div className="px-4 py-3 border-b border-white/10">
                       <div className="font-semibold">{lesNaam}</div>
                       <div className="text-sm text-gray-300 mt-1">
                         {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
@@ -439,6 +461,7 @@ export default function LedenPage() {
                     <ul className="max-h-64 overflow-y-auto">
                       {lijst.map((lid) => {
                         const actief = lid.id === geselecteerdId;
+
                         return (
                           <li key={`${lesNaam}-${lidKey(lid)}`}>
                             <button
@@ -447,12 +470,14 @@ export default function LedenPage() {
                                 setGeselecteerdId(lid.id);
                                 setShowModal(true);
                               }}
-                              className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800 hover:bg-zinc-800/80 transition-colors ${
-                                actief ? "bg-pink-500/20" : ""
-                              }`}
+                              className={[
+                                "w-full text-left px-4 py-3 text-sm border-b border-white/5 transition-colors",
+                                "hover:bg-white/5",
+                                actief ? "bg-white/8" : "",
+                              ].join(" ")}
                             >
                               <div className="font-semibold">{lid.naam}</div>
-                              <div className="text-xs text-gray-400 truncate">{soortLabel(lid.soort)}</div>
+                              <div className="text-xs text-gray-300/80 truncate">{soortLabel(lid.soort)}</div>
                             </button>
                           </li>
                         );
@@ -574,11 +599,11 @@ function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
           <Detail label="Soort" value={soortLabel(lid.soort)} />
           <Detail label="Toestemming beeldmateriaal" value={lid.toestemming || "-"} />
           <Detail label="Geboortedatum" value={formatDatum(lid.geboortedatum) || "-"} />
+          <Detail label="Adres" value={lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"} />
           <Detail
-            label="Adres"
-            value={lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"}
+            label="Datum akkoord voorwaarden"
+            value={formatDatum(lid.datumGoedkeuring) || "-"}
           />
-          <Detail label="Datum akkoord voorwaarden" value={formatDatum(lid.datumGoedkeuring) || "-"} />
         </div>
 
         <button
