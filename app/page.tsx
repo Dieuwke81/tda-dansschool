@@ -73,27 +73,27 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 text-center">
-      {/* LOGO */}
       <img
         src="/logo.png"
         alt="TDA Logo"
-        className="w-64 md:w-72 mb-8"
+        className="w-72 md:w-80 mb-8 drop-shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
       />
 
-      {/* TITEL */}
-      <h1 className="text-white text-4xl md:text-5xl font-extrabold tracking-wide mb-8">
+      <h1 className="text-white text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
         Tati&apos;s Dance Agency
       </h1>
 
+      <div className="h-6" />
+
       {rol && (
-        <p className="mb-6 text-sm text-gray-400">
+        <p className="text-sm text-gray-400 mb-6">
           Ingelogd als{" "}
           <span className="text-pink-400 font-semibold">{rol}</span>
         </p>
       )}
 
-      {isAdmin && (
-        <div className="flex gap-4 mb-8">
+      {isAdmin ? (
+        <div className="flex gap-4 mb-10">
           <Link
             href="/leden"
             className="bg-pink-500 text-black font-semibold px-7 py-3 rounded-full hover:bg-pink-600 transition"
@@ -108,6 +108,10 @@ export default function HomePage() {
             Lesgroepen
           </Link>
         </div>
+      ) : (
+        <p className="text-gray-400 mb-8 text-sm">
+          Je hebt geen beheerrechten op deze startpagina.
+        </p>
       )}
 
       <button onClick={uitloggen} className="text-gray-400 underline text-sm">
