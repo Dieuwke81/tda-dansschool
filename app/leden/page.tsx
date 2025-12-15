@@ -30,7 +30,7 @@ type Lid = {
   datumGoedkeuring: string;
 };
 
-/* ================= HULPFUNCTIES ================= */
+/* ================= HELPERS ================= */
 
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -43,7 +43,9 @@ function parseCsvLine(line: string): string[] {
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
-      } else inQuotes = !inQuotes;
+      } else {
+        inQuotes = !inQuotes;
+      }
       continue;
     }
     if (ch === "," && !inQuotes) {
@@ -65,10 +67,9 @@ const lidKey = (l: Lid) => clean(l.id) || clean(l.email) || clean(l.naam);
 
 function soortLabel(raw: unknown) {
   const x = norm(raw);
-  if (!x) return "-";
   if (x.includes("rit")) return "Rittenkaart";
   if (x.includes("abon")) return "Abonnement";
-  return clean(raw);
+  return "-";
 }
 
 function soortType(raw: unknown) {
@@ -78,81 +79,79 @@ function soortType(raw: unknown) {
   return "overig";
 }
 
-function countSoorten(lijst: Lid[]) {
-  let abonnement = 0,
-    rittenkaart = 0;
-
-  for (const l of lijst) {
-    const t = soortType(l.soort);
-    if (t === "abonnement") abonnement++;
-    else if (t === "rittenkaart") rittenkaart++;
-  }
-
-  return { abonnement, rittenkaart, totaal: lijst.length };
+function getDagMaand(raw: string) {
+  const p = raw.split(/[-/.]/);
+  if (p.length !== 3) return null;
+  return { dag: +p[0], maand: +p[1] };
 }
 
-/* ================= GROEPERING ================= */
-
-function sortAndUniqGroups(groups: Map<string, Lid[]>) {
-  return Array.from(groups.entries())
-    .map(([les, lijst]) => {
-      const seen = new Set<string>();
-      const uniek = lijst.filter((l) => {
-        const k = lidKey(l);
-        if (!k || seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-
-      uniek.sort((a, b) => clean(a.naam).localeCompare(clean(b.naam), "nl"));
-      return [les, uniek] as const;
-    })
-    .sort((a, b) => a[0].localeCompare(b[0], "nl"));
-}
-
-function groupByLesBoth(leden: Lid[]) {
-  const groups = new Map<string, Lid[]>();
-
-  for (const l of leden) {
-    if (l.les) {
-      if (!groups.has(l.les)) groups.set(l.les, []);
-      groups.get(l.les)!.push(l);
-    }
-    if (l.les2) {
-      if (!groups.has(l.les2)) groups.set(l.les2, []);
-      groups.get(l.les2)!.push(l);
-    }
-  }
-
-  return sortAndUniqGroups(groups);
-}
-
-/* ================= REGENBOOG KLEUREN ================= */
+/* ================= KLEUREN ================= */
 
 const rainbow = [
-  { bg: "bg-rose-500/10", border: "border-rose-400/70", text: "text-rose-300", ring: "ring-rose-400/40" },
-  { bg: "bg-orange-500/10", border: "border-orange-400/70", text: "text-orange-300", ring: "ring-orange-400/40" },
-  { bg: "bg-amber-500/10", border: "border-amber-400/70", text: "text-amber-300", ring: "ring-amber-400/40" },
-  { bg: "bg-lime-500/10", border: "border-lime-400/70", text: "text-lime-300", ring: "ring-lime-400/40" },
-  { bg: "bg-emerald-500/10", border: "border-emerald-400/70", text: "text-emerald-300", ring: "ring-emerald-400/40" },
-  { bg: "bg-sky-500/10", border: "border-sky-400/70", text: "text-sky-300", ring: "ring-sky-400/40" },
-  { bg: "bg-indigo-500/10", border: "border-indigo-400/70", text: "text-indigo-300", ring: "ring-indigo-400/40" },
-  { bg: "bg-violet-500/10", border: "border-violet-400/70", text: "text-violet-300", ring: "ring-violet-400/40" },
+  {
+    bg: "bg-red-500/10",
+    border: "border-red-400/60",
+    text: "text-red-400",
+  },
+  {
+    bg: "bg-orange-500/10",
+    border: "border-orange-400/60",
+    text: "text-orange-400",
+  },
+  {
+    bg: "bg-yellow-500/10",
+    border: "border-yellow-400/60",
+    text: "text-yellow-400",
+  },
+  {
+    bg: "bg-green-500/10",
+    border: "border-green-400/60",
+    text: "text-green-400",
+  },
+  {
+    bg: "bg-blue-500/10",
+    border: "border-blue-400/60",
+    text: "text-blue-400",
+  },
+  {
+    bg: "bg-purple-500/10",
+    border: "border-purple-400/60",
+    text: "text-purple-400",
+  },
 ];
 
-/* ================= PAGINA ================= */
+/* ================= GROEPEREN ================= */
+
+function groupByLes(leden: Lid[]) {
+  const map = new Map<string, Lid[]>();
+
+  for (const l of leden) {
+    if (l.les) map.set(l.les, [...(map.get(l.les) ?? []), l]);
+    if (l.les2) map.set(l.les2, [...(map.get(l.les2) ?? []), l]);
+  }
+
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "nl"));
+}
+
+function countSoorten(lijst: Lid[]) {
+  let abonnement = 0;
+  let rittenkaart = 0;
+  lijst.forEach((l) => {
+    const t = soortType(l.soort);
+    if (t === "abonnement") abonnement++;
+    if (t === "rittenkaart") rittenkaart++;
+  });
+  return { totaal: lijst.length, abonnement, rittenkaart };
+}
+
+/* ================= PAGE ================= */
 
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
-  const [rol, setRol] = useState<Rol>("docent");
   const [zoekTerm, setZoekTerm] = useState("");
-  const [activeLes, setActiveLes] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/session")
-      .then((r) => r.json())
-      .then((d: SessionResponse) => d?.rol && setRol(d.rol));
-
     fetch("/api/leden")
       .then((r) => r.text())
       .then((t) => {
@@ -178,83 +177,80 @@ export default function LedenPage() {
             };
           })
         );
+        setLoading(false);
       });
   }, []);
 
-  const gefilterdeLeden = useMemo(() => {
+  const gefilterd = useMemo(() => {
     const z = norm(zoekTerm);
     if (!z) return leden;
-
     return leden.filter(
       (l) =>
         norm(l.naam).includes(z) ||
         norm(l.email).includes(z) ||
         norm(l.les).includes(z) ||
-        norm(l.les2).includes(z) ||
-        norm(l.soort).includes(z)
+        norm(l.les2).includes(z)
     );
   }, [leden, zoekTerm]);
 
-  const groepen = useMemo(
-    () => groupByLesBoth(gefilterdeLeden),
-    [gefilterdeLeden]
-  );
+  const groepen = useMemo(() => groupByLes(gefilterd), [gefilterd]);
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
-      <main className="min-h-screen bg-black text-white p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
+      <main className="min-h-screen bg-black text-white">
 
-        {/* 🔍 ZOEK BALK */}
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Zoek op naam, email, les of soort..."
-            value={zoekTerm}
-            onChange={(e) => setZoekTerm(e.target.value)}
-            className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/40"
-          />
+        {/* ===== HEADER ===== */}
+        <div className="w-full border-b border-pink-500/30 bg-zinc-900/80 px-4 py-4">
+          <h1 className="text-2xl font-bold text-pink-400">Leden</h1>
         </div>
 
-        <div className="space-y-4">
-          {groepen.map(([les, lijst], i) => {
-            const p = rainbow[i % rainbow.length];
-            const c = countSoorten(lijst);
-            const active = activeLes === les;
+        <div className="p-4">
 
-            return (
-              <div
-                key={les}
-                onClick={() => setActiveLes(les)}
-                className={[
-                  "rounded-2xl border transition-all cursor-pointer",
-                  p.bg,
-                  p.border,
-                  active
-                    ? `ring-2 ${p.ring} shadow-lg brightness-[1.08]`
-                    : "hover:brightness-[1.04]",
-                ].join(" ")}
-              >
-                <div className="px-4 py-3 border-b border-white/10">
-                  <div className={`font-semibold ${p.text}`}>{les}</div>
-                  <div className="text-sm text-gray-300 mt-1">
-                    {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
+          {/* ===== ZOEK ===== */}
+          <input
+            value={zoekTerm}
+            onChange={(e) => setZoekTerm(e.target.value)}
+            placeholder="Zoek op naam, email of les…"
+            className="mb-4 w-full rounded bg-zinc-900 border border-zinc-700 p-2"
+          />
+
+          {loading && <p className="text-gray-400">Laden…</p>}
+
+          <div className="space-y-4">
+            {groepen.map(([les, lijst], i) => {
+              const kleur = rainbow[i % rainbow.length];
+              const c = countSoorten(lijst);
+
+              return (
+                <div
+                  key={les}
+                  className={`rounded-xl border ${kleur.border} ${kleur.bg}`}
+                >
+                  <div className="px-4 py-3 border-b border-white/10">
+                    <div className={`font-semibold ${kleur.text}`}>{les}</div>
+                    <div className="text-sm text-gray-300 mt-1">
+                      {c.totaal} leden • {c.abonnement} abonnement •{" "}
+                      {c.rittenkaart} rittenkaart
+                    </div>
                   </div>
-                </div>
 
-                <ul>
-                  {lijst.map((l) => (
-                    <li key={lidKey(l)} className="px-4 py-3 border-t border-white/5">
-                      <div className="font-medium">{l.naam}</div>
-                      <div className="text-xs text-gray-400">
-                        {soortLabel(l.soort)}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
+                  <ul>
+                    {lijst.map((l) => (
+                      <li
+                        key={lidKey(l)}
+                        className="px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5"
+                      >
+                        <div className="font-medium">{l.naam}</div>
+                        <div className="text-xs text-gray-400">
+                          {soortLabel(l.soort)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </main>
     </AuthGuard>
