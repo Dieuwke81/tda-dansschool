@@ -1,17 +1,10 @@
 
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AuthGuard from "../auth-guard";
 
 /* ================= TYPES ================= */
-
-type Rol = "eigenaar" | "docent" | "gast" | "lid";
-
-type SessionResponse = {
-  loggedIn?: boolean;
-  rol?: Rol;
-};
 
 type Lid = {
   id: string;
@@ -79,45 +72,15 @@ function soortType(raw: unknown) {
   return "overig";
 }
 
-function getDagMaand(raw: string) {
-  const p = raw.split(/[-/.]/);
-  if (p.length !== 3) return null;
-  return { dag: +p[0], maand: +p[1] };
-}
-
 /* ================= KLEUREN ================= */
 
 const rainbow = [
-  {
-    bg: "bg-red-500/10",
-    border: "border-red-400/60",
-    text: "text-red-400",
-  },
-  {
-    bg: "bg-orange-500/10",
-    border: "border-orange-400/60",
-    text: "text-orange-400",
-  },
-  {
-    bg: "bg-yellow-500/10",
-    border: "border-yellow-400/60",
-    text: "text-yellow-400",
-  },
-  {
-    bg: "bg-green-500/10",
-    border: "border-green-400/60",
-    text: "text-green-400",
-  },
-  {
-    bg: "bg-blue-500/10",
-    border: "border-blue-400/60",
-    text: "text-blue-400",
-  },
-  {
-    bg: "bg-purple-500/10",
-    border: "border-purple-400/60",
-    text: "text-purple-400",
-  },
+  { bg: "bg-red-500/10", border: "border-red-400/70", text: "text-red-300" },
+  { bg: "bg-orange-500/10", border: "border-orange-400/70", text: "text-orange-300" },
+  { bg: "bg-yellow-500/10", border: "border-yellow-400/70", text: "text-yellow-300" },
+  { bg: "bg-green-500/10", border: "border-green-400/70", text: "text-green-300" },
+  { bg: "bg-blue-500/10", border: "border-blue-400/70", text: "text-blue-300" },
+  { bg: "bg-purple-500/10", border: "border-purple-400/70", text: "text-purple-300" },
 ];
 
 /* ================= GROEPEREN ================= */
@@ -152,31 +115,46 @@ export default function LedenPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/leden")
+    fetch("/api/leden", { cache: "no-store" })
       .then((r) => r.text())
       .then((t) => {
-        const [, ...rows] = t.trim().split("\n");
+        const lines = t.trim().split("\n");
+        if (lines.length < 2) {
+          setLeden([]);
+          setLoading(false);
+          return;
+        }
+
+        const [, ...rows] = lines;
+
         setLeden(
-          rows.map((l) => {
-            const c = parseCsvLine(l);
-            return {
-              id: c[0],
-              naam: c[1],
-              email: c[2],
-              les: c[3],
-              les2: c[4],
-              soort: c[5],
-              toestemming: c[6],
-              tel1: c[7],
-              tel2: c[8],
-              geboortedatum: c[9],
-              adres: c[10],
-              postcode: c[11],
-              plaats: c[12],
-              datumGoedkeuring: c[13],
-            };
-          })
+          rows
+            .filter((x) => x.trim().length > 0)
+            .map((line) => {
+              const c = parseCsvLine(line);
+              return {
+                id: c[0] ?? "",
+                naam: c[1] ?? "",
+                email: c[2] ?? "",
+                les: c[3] ?? "",
+                les2: c[4] ?? "",
+                soort: c[5] ?? "",
+                toestemming: c[6] ?? "",
+                tel1: c[7] ?? "",
+                tel2: c[8] ?? "",
+                geboortedatum: c[9] ?? "",
+                adres: c[10] ?? "",
+                postcode: c[11] ?? "",
+                plaats: c[12] ?? "",
+                datumGoedkeuring: c[13] ?? "",
+              };
+            })
         );
+
+        setLoading(false);
+      })
+      .catch(() => {
+        setLeden([]);
         setLoading(false);
       });
   }, []);
@@ -198,23 +176,30 @@ export default function LedenPage() {
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white">
+        {/* ===== STICKY HEADER ===== */}
+        <header className="sticky top-0 z-40 w-full border-b border-pink-500/35 bg-black/75 backdrop-blur supports-[backdrop-filter]:bg-black/55">
+          <div className="px-4 py-4">
+            <h1 className="text-2xl font-bold text-pink-400">Leden</h1>
 
-        {/* ===== HEADER ===== */}
-        <div className="w-full border-b border-pink-500/30 bg-zinc-900/80 px-4 py-4">
-          <h1 className="text-2xl font-bold text-pink-400">Leden</h1>
-        </div>
+            {/* ✅ Zoekbalk in header */}
+            <div className="mt-3">
+              <input
+                value={zoekTerm}
+                onChange={(e) => setZoekTerm(e.target.value)}
+                placeholder="Zoek op naam, email of les…"
+                className="w-full rounded-lg bg-zinc-900/70 border border-zinc-600/80 px-3 py-2 text-white placeholder:text-gray-400 outline-none focus:border-pink-400/70 focus:ring-2 focus:ring-pink-500/20"
+              />
+            </div>
+          </div>
+        </header>
 
-        <div className="p-4">
-
-          {/* ===== ZOEK ===== */}
-          <input
-            value={zoekTerm}
-            onChange={(e) => setZoekTerm(e.target.value)}
-            placeholder="Zoek op naam, email of les…"
-            className="mb-4 w-full rounded bg-zinc-900 border border-zinc-700 p-2"
-          />
-
+        {/* extra ruimte zodat cards niet “onder” header plakken */}
+        <div className="p-4 pt-5">
           {loading && <p className="text-gray-400">Laden…</p>}
+
+          {!loading && groepen.length === 0 && (
+            <p className="text-gray-400">Geen leden gevonden.</p>
+          )}
 
           <div className="space-y-4">
             {groepen.map(([les, lijst], i) => {
@@ -222,15 +207,15 @@ export default function LedenPage() {
               const c = countSoorten(lijst);
 
               return (
-                <div
+                <section
                   key={les}
-                  className={`rounded-xl border ${kleur.border} ${kleur.bg}`}
+                  className={`rounded-2xl border ${kleur.border} ${kleur.bg} overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.25)]`}
                 >
                   <div className="px-4 py-3 border-b border-white/10">
                     <div className={`font-semibold ${kleur.text}`}>{les}</div>
+
                     <div className="text-sm text-gray-300 mt-1">
-                      {c.totaal} leden • {c.abonnement} abonnement •{" "}
-                      {c.rittenkaart} rittenkaart
+                      {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
                     </div>
                   </div>
 
@@ -238,16 +223,14 @@ export default function LedenPage() {
                     {lijst.map((l) => (
                       <li
                         key={lidKey(l)}
-                        className="px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5"
+                        className="px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors"
                       >
                         <div className="font-medium">{l.naam}</div>
-                        <div className="text-xs text-gray-400">
-                          {soortLabel(l.soort)}
-                        </div>
+                        <div className="text-xs text-gray-400">{soortLabel(l.soort)}</div>
                       </li>
                     ))}
                   </ul>
-                </div>
+                </section>
               );
             })}
           </div>
