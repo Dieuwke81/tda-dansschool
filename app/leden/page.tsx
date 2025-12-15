@@ -126,7 +126,6 @@ export default function LedenPage() {
         }
 
         const [, ...rows] = lines;
-
         setLeden(
           rows
             .filter((x) => x.trim().length > 0)
@@ -177,12 +176,13 @@ export default function LedenPage() {
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white">
         {/* ===== STICKY HEADER ===== */}
-        <header className="sticky top-0 z-40 w-full border-b border-pink-500/35 bg-black/75 backdrop-blur supports-[backdrop-filter]:bg-black/55">
-          <div className="px-4 py-4">
-            <h1 className="text-2xl font-bold text-pink-400">Leden</h1>
+        <header className="sticky top-0 z-40 w-full border-b border-pink-500/35 bg-black/75 backdrop-blur-md supports-[backdrop-filter]:bg-black/55 shadow-[0_4px_20px_rgba(255,0,128,0.05)]">
+          <div className="px-4 py-5 flex flex-col items-center text-center">
+            <h1 className="text-3xl font-extrabold text-pink-400 tracking-tight">
+              Leden
+            </h1>
 
-            {/* ✅ Zoekbalk in header */}
-            <div className="mt-3">
+            <div className="mt-3 w-full max-w-md">
               <input
                 value={zoekTerm}
                 onChange={(e) => setZoekTerm(e.target.value)}
@@ -193,7 +193,7 @@ export default function LedenPage() {
           </div>
         </header>
 
-        {/* extra ruimte zodat cards niet “onder” header plakken */}
+        {/* ===== CONTENT ===== */}
         <div className="p-4 pt-5">
           {loading && <p className="text-gray-400">Laden…</p>}
 
@@ -209,13 +209,13 @@ export default function LedenPage() {
               return (
                 <section
                   key={les}
-                  className={`rounded-2xl border ${kleur.border} ${kleur.bg} overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.25)]`}
+                  className={`rounded-2xl border ${kleur.border} ${kleur.bg} overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.25)] transition-transform hover:scale-[1.01] hover:shadow-[0_8px_40px_rgba(255,255,255,0.08)]`}
                 >
                   <div className="px-4 py-3 border-b border-white/10">
                     <div className={`font-semibold ${kleur.text}`}>{les}</div>
-
                     <div className="text-sm text-gray-300 mt-1">
-                      {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
+                      {c.totaal} leden • {c.abonnement} abonnement •{" "}
+                      {c.rittenkaart} rittenkaart
                     </div>
                   </div>
 
@@ -226,7 +226,9 @@ export default function LedenPage() {
                         className="px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors"
                       >
                         <div className="font-medium">{l.naam}</div>
-                        <div className="text-xs text-gray-400">{soortLabel(l.soort)}</div>
+                        <div className="text-xs text-gray-400">
+                          {soortLabel(l.soort)}
+                        </div>
                       </li>
                     ))}
                   </ul>
