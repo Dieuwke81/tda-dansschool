@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -55,7 +56,6 @@ export default function HomePage() {
       // negeren
     }
 
-    // legacy opruimen (als er nog iets staat)
     if (typeof window !== "undefined") {
       localStorage.removeItem("ingelogd");
       localStorage.removeItem("rol");
@@ -79,13 +79,15 @@ export default function HomePage() {
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
       <img src="/logo.png" alt="TDA Logo" className="w-52 mb-6" />
 
-      <h1 className="text-3xl font-bold text-pink-500 mb-2">TDA Dansschool</h1>
-
-      <p className="text-gray-300 mb-6">Beheeromgeving voor leden en lesgroepen</p>
+      {/* ✅ Nieuwe titel */}
+      <h1 className="text-4xl font-extrabold text-white mb-6">
+        Tati&apos;s Dance Agency
+      </h1>
 
       {rol && (
-        <p className="mb-4 text-sm text-gray-400">
-          Ingelogd als: <span className="text-pink-400 font-semibold">{rol}</span>
+        <p className="mb-6 text-sm text-gray-400">
+          Ingelogd als:{" "}
+          <span className="text-pink-400 font-semibold">{rol}</span>
         </p>
       )}
 
