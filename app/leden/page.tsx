@@ -82,12 +82,8 @@ function lidKey(l: Lid) {
 function soortLabel(raw: unknown) {
   const x = norm(raw);
   if (!x) return "-";
-
-  // vang varianten af
   if (x.includes("rit")) return "Rittenkaart";
   if (x.includes("abon")) return "Abonnement";
-
-  // fallback: originele tekst met hoofdletter
   const c = clean(raw);
   return c ? c.charAt(0).toUpperCase() + c.slice(1) : "-";
 }
@@ -135,9 +131,7 @@ function formatDatum(raw: string) {
   if (!d || !m) return raw;
   if (y.length === 2) y = "20" + y;
 
-  return `${d.toString().padStart(2, "0")}-${m
-    .toString()
-    .padStart(2, "0")}-${y}`;
+  return `${d.toString().padStart(2, "0")}-${m.toString().padStart(2, "0")}-${y}`;
 }
 
 function getDagMaand(raw: string): { dag: number; maand: number } | null {
@@ -197,9 +191,7 @@ function groupByLesForDocent(leden: Lid[], allowedLessons: Set<string>) {
     if (m2) add(les2, lid);
 
     // fallback (zou bijna nooit moeten)
-    if (!m1 && !m2) {
-      add(les1 || les2 || "Geen les", lid);
-    }
+    if (!m1 && !m2) add(les1 || les2 || "Geen les", lid);
   }
 
   return sortAndUniqGroups(groups);
@@ -266,12 +258,8 @@ export default function LedenPage() {
         // 1) rol ophalen
         let currentRol: Rol = "docent";
         try {
-          const s = await fetch("/api/session", {
-            cache: "no-store",
-            credentials: "include",
-          });
+          const s = await fetch("/api/session", { cache: "no-store", credentials: "include" });
           const d = (await s.json().catch(() => null)) as SessionResponse | null;
-
           if (!cancelled && s.ok && d?.loggedIn && d?.rol) {
             currentRol = d.rol;
             setRol(d.rol);
@@ -298,10 +286,7 @@ export default function LedenPage() {
         }
 
         // 2) leden ophalen
-        const res = await fetch("/api/leden", {
-          cache: "no-store",
-          credentials: "include",
-        });
+        const res = await fetch("/api/leden", { cache: "no-store", credentials: "include" });
         if (!res.ok) throw new Error("Kon de ledenlijst niet ophalen");
 
         const text = await res.text();
@@ -372,8 +357,7 @@ export default function LedenPage() {
     return groupByLesForDocent(gefilterdeLeden, allowedLessons);
   }, [gefilterdeLeden, rol, allowedLessons]);
 
-  const geselecteerdLid =
-    gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
+  const geselecteerdLid = gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
 
   const { jarigVandaag, jarigMorgen } = useMemo(() => {
     const vandaag = new Date();
@@ -444,9 +428,10 @@ export default function LedenPage() {
                     key={lesNaam}
                     className="bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden"
                   >
-                    <div className="px-4 py-2 border-b border-zinc-700 flex items-center justify-between gap-3">
+                    {/* ✅ TELLING ONDER TITEL */}
+                    <div className="px-4 py-2 border-b border-zinc-700">
                       <div className="font-semibold">{lesNaam}</div>
-                      <div className="text-sm text-gray-300 whitespace-nowrap">
+                      <div className="text-sm text-gray-300 mt-1">
                         {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
                       </div>
                     </div>
@@ -467,9 +452,7 @@ export default function LedenPage() {
                               }`}
                             >
                               <div className="font-semibold">{lid.naam}</div>
-                              <div className="text-xs text-gray-400 truncate">
-                                {soortLabel(lid.soort)}
-                              </div>
+                              <div className="text-xs text-gray-400 truncate">{soortLabel(lid.soort)}</div>
                             </button>
                           </li>
                         );
