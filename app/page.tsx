@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -176,7 +176,7 @@ export default function HomePage() {
           applicationServerKey: urlBase64ToUint8Array(vapidPublic),
         }));
 
-      // 4) Save on server (Google Sheet via jouw route.ts)
+      // 4) Save on server
       const deviceLabel =
         (typeof navigator !== "undefined" ? navigator.userAgent : "android") || "android";
 
@@ -226,8 +226,10 @@ export default function HomePage() {
 
   const ledenActive = isActive("/leden");
   const lessenActive = isActive("/lessen");
+  const wijzigingenActive = isActive("/wijzigingen");
 
   const showPushBlock = rol === "eigenaar";
+  const showWijzigingenLink = rol === "eigenaar"; // alleen eigenaar moet keuren
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 text-center">
@@ -254,13 +256,13 @@ export default function HomePage() {
       )}
 
       {isAdmin ? (
-        <div className="mt-10 flex gap-4 mb-8">
+        <div className="mt-10 w-full max-w-md flex flex-col gap-3 mb-8">
           <Link
             href="/leden"
             aria-current={ledenActive ? "page" : undefined}
             className={[
               baseCard,
-              "bg-pink-500 text-black border-pink-400/50",
+              "w-full bg-pink-500 text-black border-pink-400/50",
               ledenActive ? activeGlow : inactiveGlow,
               "hover:bg-pink-400 active:scale-[0.99]",
             ].join(" ")}
@@ -273,13 +275,28 @@ export default function HomePage() {
             aria-current={lessenActive ? "page" : undefined}
             className={[
               baseCard,
-              "bg-zinc-950/40 text-white border-zinc-700",
+              "w-full bg-zinc-950/40 text-white border-zinc-700",
               lessenActive ? activeGlow : inactiveGlow,
               "hover:border-pink-500/60 hover:bg-pink-500/10 active:scale-[0.99]",
             ].join(" ")}
           >
             <span className="relative z-10 text-pink-400">Lesgroepen</span>
           </Link>
+
+          {showWijzigingenLink && (
+            <Link
+              href="/wijzigingen"
+              aria-current={wijzigingenActive ? "page" : undefined}
+              className={[
+                baseCard,
+                "w-full bg-zinc-950/40 text-white border-pink-500/60",
+                wijzigingenActive ? activeGlow : inactiveGlow,
+                "hover:bg-pink-500/10 hover:border-pink-400 active:scale-[0.99]",
+              ].join(" ")}
+            >
+              <span className="relative z-10 text-pink-400">Wijzigingen</span>
+            </Link>
+          )}
         </div>
       ) : (
         <p className="text-gray-400 mt-8 mb-10 text-sm">
@@ -322,11 +339,7 @@ export default function HomePage() {
                     : "bg-pink-500 text-black hover:bg-pink-400",
                 ].join(" ")}
               >
-                {pushBusy
-                  ? "Bezig…"
-                  : pushEnabled
-                  ? "Notificaties staan aan"
-                  : "Notificaties aanzetten"}
+                {pushBusy ? "Bezig…" : pushEnabled ? "Notificaties staan aan" : "Notificaties aanzetten"}
               </button>
 
               {!pushSupported && (
@@ -341,11 +354,7 @@ export default function HomePage() {
                 </p>
               )}
 
-              {!!pushMsg && (
-                <p className="text-xs text-gray-300">
-                  {pushMsg}
-                </p>
-              )}
+              {!!pushMsg && <p className="text-xs text-gray-300">{pushMsg}</p>}
             </div>
           </div>
         </div>
