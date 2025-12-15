@@ -107,13 +107,13 @@ function groupByLesBoth(leden: Lid[]) {
 /* ================= KLEUREN ================= */
 
 const rainbow = [
-  "from-red-500/10 to-red-500/5 border-red-400/40 text-red-300",
-  "from-orange-500/10 to-orange-500/5 border-orange-400/40 text-orange-300",
-  "from-yellow-500/10 to-yellow-500/5 border-yellow-400/40 text-yellow-300",
-  "from-green-500/10 to-green-500/5 border-green-400/40 text-green-300",
-  "from-cyan-500/10 to-cyan-500/5 border-cyan-400/40 text-cyan-300",
-  "from-blue-500/10 to-blue-500/5 border-blue-400/40 text-blue-300",
-  "from-purple-500/10 to-purple-500/5 border-purple-400/40 text-purple-300",
+  { bg: "from-red-500/10 to-red-500/5", border: "border-red-400/50", text: "text-red-300" },
+  { bg: "from-orange-500/10 to-orange-500/5", border: "border-orange-400/50", text: "text-orange-300" },
+  { bg: "from-yellow-500/10 to-yellow-500/5", border: "border-yellow-400/50", text: "text-yellow-300" },
+  { bg: "from-green-500/10 to-green-500/5", border: "border-green-400/50", text: "text-green-300" },
+  { bg: "from-cyan-500/10 to-cyan-500/5", border: "border-cyan-400/50", text: "text-cyan-300" },
+  { bg: "from-blue-500/10 to-blue-500/5", border: "border-blue-400/50", text: "text-blue-300" },
+  { bg: "from-purple-500/10 to-purple-500/5", border: "border-purple-400/50", text: "text-purple-300" },
 ];
 
 /* ================= PAGINA ================= */
@@ -175,7 +175,9 @@ export default function LedenPage() {
       <main className="min-h-screen bg-black text-white">
         {/* ===== STICKY HEADER ===== */}
         <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-4">
-          <h1 className="text-3xl font-bold text-center mb-3">Leden</h1>
+          <h1 className="text-3xl font-bold text-center mb-3 text-pink-500">
+            Leden
+          </h1>
           <input
             value={zoek}
             onChange={(e) => setZoek(e.target.value)}
@@ -195,10 +197,12 @@ export default function LedenPage() {
             return (
               <div
                 key={les}
-                className={`rounded-xl border bg-gradient-to-br ${kleur}`}
+                className={`rounded-xl border ${kleur.border} bg-gradient-to-br ${kleur.bg}`}
               >
                 <div className="px-4 py-3 border-b border-white/10">
-                  <div className="font-semibold text-lg">{les}</div>
+                  <div className={`font-semibold text-lg ${kleur.text}`}>
+                    {les}
+                  </div>
                   <div className="text-sm text-gray-300">
                     {c.totaal} leden • {c.abonnement} abonnement •{" "}
                     {c.rittenkaart} rittenkaart
@@ -219,7 +223,9 @@ export default function LedenPage() {
                               : "hover:bg-white/5"
                           }`}
                         >
-                          <div className="font-medium">{l.naam}</div>
+                          <div className="font-medium text-white">
+                            {l.naam}
+                          </div>
                           <div className="text-xs text-gray-300">
                             {soortLabel(l.soort)}
                           </div>
