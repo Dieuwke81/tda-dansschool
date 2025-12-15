@@ -4,13 +4,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AuthGuard from "../auth-guard";
 
+/* ================= TYPES ================= */
+
 type Rol = "eigenaar" | "docent" | "gast" | "lid";
 
 type SessionResponse = {
   loggedIn?: boolean;
   rol?: Rol;
-  username?: string;
-  mustChangePassword?: boolean;
 };
 
 type Lid = {
@@ -30,7 +30,7 @@ type Lid = {
   datumGoedkeuring: string;
 };
 
-/* ---------- HULPFUNCTIES ---------- */
+/* ================= HULPFUNCTIES ================= */
 
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -39,580 +39,181 @@ function parseCsvLine(line: string): string[] {
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-
     if (ch === '"') {
       if (inQuotes && line[i + 1] === '"') {
         cur += '"';
         i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      } else inQuotes = !inQuotes;
       continue;
     }
-
     if (ch === "," && !inQuotes) {
       out.push(cur.trim());
       cur = "";
       continue;
     }
-
     cur += ch;
   }
-
   out.push(cur.trim());
   return out;
 }
 
-function clean(s: unknown) {
-  return String(s ?? "").trim();
-}
+const clean = (s: unknown) => String(s ?? "").trim();
+const norm = (s: unknown) =>
+  clean(s).replace(/\u00A0/g, " ").replace(/\s+/g, " ").toLowerCase();
 
-function norm(s: unknown) {
-  return clean(s)
-    .replace(/\u00A0/g, " ")
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
+const lidKey = (l: Lid) => clean(l.id) || clean(l.email) || clean(l.naam);
 
-function lidKey(l: Lid) {
-  return clean(l.id) || clean(l.email) || clean(l.naam);
-}
-
-// ✅ Soort normaliseren naar 2 smaken (abon / ritten)
 function soortLabel(raw: unknown) {
   const x = norm(raw);
   if (!x) return "-";
   if (x.includes("rit")) return "Rittenkaart";
   if (x.includes("abon")) return "Abonnement";
-  const c = clean(raw);
-  return c ? c.charAt(0).toUpperCase() + c.slice(1) : "-";
+  return clean(raw);
 }
 
-function soortType(raw: unknown): "abonnement" | "rittenkaart" | "overig" {
+function soortType(raw: unknown) {
   const x = norm(raw);
-  if (!x) return "overig";
   if (x.includes("rit")) return "rittenkaart";
   if (x.includes("abon")) return "abonnement";
   return "overig";
 }
 
-function fixTelefoon(nr: string) {
-  if (!nr) return "";
-  const schoon = nr.replace(/\D/g, "");
-  if (schoon.length === 0) return "";
-  if (schoon.length === 9) return "0" + schoon;
-  return schoon;
-}
-
-function formatTelefoon(nr: string) {
-  return fixTelefoon(nr);
-}
-
-function formatWhatsAppUrl(nr: string) {
-  const fixed = fixTelefoon(nr);
-  if (!fixed) return "";
-  let digits = fixed.replace(/\D/g, "");
-
-  if (digits.startsWith("0031")) digits = "31" + digits.slice(4);
-  else if (digits.startsWith("0")) digits = "31" + digits.slice(1);
-
-  return `https://wa.me/${digits}`;
-}
-
-function formatDatum(raw: string) {
-  if (!raw) return "";
-  const parts = raw.split(/[-/.]/);
-  if (parts.length !== 3) return raw;
-
-  const d = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  let y = parts[2];
-
-  if (!d || !m) return raw;
-  if (y.length === 2) y = "20" + y;
-
-  return `${d.toString().padStart(2, "0")}-${m.toString().padStart(2, "0")}-${y}`;
-}
-
-function getDagMaand(raw: string): { dag: number; maand: number } | null {
-  if (!raw) return null;
-  const parts = raw.split(/[-/.]/);
-  if (parts.length !== 3) return null;
-  const d = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (!d || !m) return null;
-  return { dag: d, maand: m };
-}
-
-function sortAndUniqGroups(groups: Map<string, Lid[]>) {
-  const sorted = Array.from(groups.entries())
-    .map(([lesNaam, lijst]) => {
-      const seen = new Set<string>();
-      const uniek = lijst.filter((l) => {
-        const k = lidKey(l);
-        if (!k) return false;
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-
-      uniek.sort((a, b) => clean(a.naam).localeCompare(clean(b.naam), "nl"));
-      return [lesNaam, uniek] as const;
-    })
-    .sort((a, b) => a[0].localeCompare(b[0], "nl"));
-
-  return sorted;
-}
-
-/**
- * ✅ DOCENT:
- * Toon lid in les en/of les2 als de docent die les geeft.
- * - beide lessen door docent? -> lid in beide groepen
- * - maar 1? -> alleen die
- */
-function groupByLesForDocent(leden: Lid[], allowedLessons: Set<string>) {
-  const groups = new Map<string, Lid[]>();
-
-  function add(lesNaam: string, lid: Lid) {
-    const key = clean(lesNaam);
-    if (!key) return;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(lid);
-  }
-
-  for (const lid of leden) {
-    const les1 = clean(lid.les);
-    const les2 = clean(lid.les2);
-
-    const m1 = !!les1 && allowedLessons.has(norm(les1));
-    const m2 = !!les2 && allowedLessons.has(norm(les2));
-
-    if (m1) add(les1, lid);
-    if (m2) add(les2, lid);
-
-    // fallback (zou bijna nooit moeten)
-    if (!m1 && !m2) add(les1 || les2 || "Geen les", lid);
-  }
-
-  return sortAndUniqGroups(groups);
-}
-
-/**
- * ✅ EIGENAAR: lid mag in 2 groepen staan (les én les2)
- */
-function groupByLesBoth(leden: Lid[]) {
-  const groups = new Map<string, Lid[]>();
-
-  function add(lesNaam: string, lid: Lid) {
-    const key = clean(lesNaam);
-    if (!key) return;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(lid);
-  }
-
-  for (const lid of leden) {
-    add(lid.les, lid);
-    add(lid.les2, lid);
-  }
-
-  return sortAndUniqGroups(groups);
-}
-
-// ✅ tel per groep hoeveel abonnement/rittenkaart
 function countSoorten(lijst: Lid[]) {
-  let abonnement = 0;
-  let rittenkaart = 0;
-  let overig = 0;
-
+  let abonnement = 0,
+    rittenkaart = 0;
   for (const l of lijst) {
     const t = soortType(l.soort);
     if (t === "abonnement") abonnement++;
     else if (t === "rittenkaart") rittenkaart++;
-    else overig++;
   }
-
-  return { abonnement, rittenkaart, overig, totaal: lijst.length };
+  return { abonnement, rittenkaart, totaal: lijst.length };
 }
 
-/* ---------- STIJL: REGENBOOG KAARTKLEUREN ---------- */
-/** Zachte, subtiele rainbow op volgorde. */
-const rainbowCard = [
-  { bg: "bg-rose-500/8", border: "border-rose-400/30", ring: "ring-rose-300/25", glow: "shadow-[0_0_28px_rgba(244,63,94,0.18)]" },
-  { bg: "bg-orange-500/8", border: "border-orange-400/30", ring: "ring-orange-300/25", glow: "shadow-[0_0_28px_rgba(249,115,22,0.18)]" },
-  { bg: "bg-amber-500/8", border: "border-amber-400/30", ring: "ring-amber-300/25", glow: "shadow-[0_0_28px_rgba(245,158,11,0.18)]" },
-  { bg: "bg-lime-500/8", border: "border-lime-400/30", ring: "ring-lime-300/25", glow: "shadow-[0_0_28px_rgba(163,230,53,0.16)]" },
-  { bg: "bg-emerald-500/8", border: "border-emerald-400/30", ring: "ring-emerald-300/25", glow: "shadow-[0_0_28px_rgba(16,185,129,0.16)]" },
-  { bg: "bg-sky-500/8", border: "border-sky-400/30", ring: "ring-sky-300/25", glow: "shadow-[0_0_28px_rgba(14,165,233,0.16)]" },
-  { bg: "bg-indigo-500/8", border: "border-indigo-400/30", ring: "ring-indigo-300/25", glow: "shadow-[0_0_28px_rgba(99,102,241,0.16)]" },
-  { bg: "bg-violet-500/8", border: "border-violet-400/30", ring: "ring-violet-300/25", glow: "shadow-[0_0_28px_rgba(139,92,246,0.16)]" },
-] as const;
+/* ================= GROEPERING ================= */
 
-/* ---------------------------------- */
+function sortAndUniqGroups(groups: Map<string, Lid[]>) {
+  return Array.from(groups.entries())
+    .map(([les, lijst]) => {
+      const seen = new Set<string>();
+      const uniek = lijst.filter((l) => {
+        const k = lidKey(l);
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      uniek.sort((a, b) => clean(a.naam).localeCompare(clean(b.naam), "nl"));
+      return [les, uniek] as const;
+    })
+    .sort((a, b) => a[0].localeCompare(b[0], "nl"));
+}
+
+function groupByLesBoth(leden: Lid[]) {
+  const groups = new Map<string, Lid[]>();
+  for (const l of leden) {
+    if (l.les) (groups.get(l.les) ?? groups.set(l.les, []).get(l.les)!).push(l);
+    if (l.les2) (groups.get(l.les2) ?? groups.set(l.les2, []).get(l.les2)!).push(l);
+  }
+  return sortAndUniqGroups(groups);
+}
+
+/* ================= REGENBOOG PALET ================= */
+
+const rainbow = [
+  { bg: "bg-rose-500/8", border: "border-rose-400/60", text: "text-rose-300", ring: "ring-rose-400/40", glow: "shadow-[0_0_30px_rgba(244,63,94,0.28)]" },
+  { bg: "bg-orange-500/8", border: "border-orange-400/60", text: "text-orange-300", ring: "ring-orange-400/40", glow: "shadow-[0_0_30px_rgba(249,115,22,0.28)]" },
+  { bg: "bg-amber-500/8", border: "border-amber-400/60", text: "text-amber-300", ring: "ring-amber-400/40", glow: "shadow-[0_0_30px_rgba(245,158,11,0.26)]" },
+  { bg: "bg-lime-500/8", border: "border-lime-400/60", text: "text-lime-300", ring: "ring-lime-400/40", glow: "shadow-[0_0_30px_rgba(163,230,53,0.24)]" },
+  { bg: "bg-emerald-500/8", border: "border-emerald-400/60", text: "text-emerald-300", ring: "ring-emerald-400/40", glow: "shadow-[0_0_30px_rgba(16,185,129,0.24)]" },
+  { bg: "bg-sky-500/8", border: "border-sky-400/60", text: "text-sky-300", ring: "ring-sky-400/40", glow: "shadow-[0_0_30px_rgba(14,165,233,0.24)]" },
+  { bg: "bg-indigo-500/8", border: "border-indigo-400/60", text: "text-indigo-300", ring: "ring-indigo-400/40", glow: "shadow-[0_0_30px_rgba(99,102,241,0.24)]" },
+  { bg: "bg-violet-500/8", border: "border-violet-400/60", text: "text-violet-300", ring: "ring-violet-400/40", glow: "shadow-[0_0_30px_rgba(139,92,246,0.24)]" },
+];
+
+/* ================= PAGINA ================= */
 
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [zoekTerm, setZoekTerm] = useState("");
-  const [geselecteerdId, setGeselecteerdId] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-
   const [rol, setRol] = useState<Rol>("docent");
-  const [allowedLessons, setAllowedLessons] = useState<Set<string>>(new Set());
+  const [activeLes, setActiveLes] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadAll() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // 1) rol ophalen
-        let currentRol: Rol = "docent";
-        try {
-          const s = await fetch("/api/session", { cache: "no-store", credentials: "include" });
-          const d = (await s.json().catch(() => null)) as SessionResponse | null;
-          if (!cancelled && s.ok && d?.loggedIn && d?.rol) {
-            currentRol = d.rol;
-            setRol(d.rol);
-          }
-        } catch {
-          // ignore
-        }
-
-        // 1b) docent-lessen ophalen
-        if (currentRol === "docent") {
-          try {
-            const rr = await fetch("/api/docent-lessen", {
-              cache: "no-store",
-              credentials: "include",
-            });
-            const jj = await rr.json().catch(() => null);
-            const lessons = Array.isArray(jj?.lessons) ? jj.lessons : [];
-            if (!cancelled) setAllowedLessons(new Set(lessons.map((x: any) => norm(x))));
-          } catch {
-            if (!cancelled) setAllowedLessons(new Set());
-          }
-        } else {
-          if (!cancelled) setAllowedLessons(new Set());
-        }
-
-        // 2) leden ophalen
-        const res = await fetch("/api/leden", { cache: "no-store", credentials: "include" });
-        if (!res.ok) throw new Error("Kon de ledenlijst niet ophalen");
-
-        const text = await res.text();
-        const lines = text.trim().split("\n");
-        if (lines.length < 2) {
-          if (!cancelled) setLeden([]);
-          return;
-        }
-
-        const [, ...rows] = lines;
-
-        const data: Lid[] = rows
-          .filter((line) => line.trim().length > 0)
-          .map((line) => {
-            const c = parseCsvLine(line);
+    fetch("/api/session")
+      .then((r) => r.json())
+      .then((d: SessionResponse) => d?.rol && setRol(d.rol));
+    fetch("/api/leden")
+      .then((r) => r.text())
+      .then((t) => {
+        const [, ...rows] = t.trim().split("\n");
+        setLeden(
+          rows.map((l) => {
+            const c = parseCsvLine(l);
             return {
-              id: c[0] ?? "",
-              naam: c[1] ?? "",
-              email: c[2] ?? "",
-              les: c[3] ?? "",
-              les2: c[4] ?? "",
-              soort: c[5] ?? "",
-              toestemming: c[6] ?? "",
-              tel1: c[7] ?? "",
-              tel2: c[8] ?? "",
-              geboortedatum: c[9] ?? "",
-              adres: c[10] ?? "",
-              postcode: c[11] ?? "",
-              plaats: c[12] ?? "",
-              datumGoedkeuring: c[13] ?? "",
+              id: c[0],
+              naam: c[1],
+              email: c[2],
+              les: c[3],
+              les2: c[4],
+              soort: c[5],
+              toestemming: c[6],
+              tel1: c[7],
+              tel2: c[8],
+              geboortedatum: c[9],
+              adres: c[10],
+              postcode: c[11],
+              plaats: c[12],
+              datumGoedkeuring: c[13],
             };
-          });
-
-        if (!cancelled) {
-          setLeden(data);
-          if (data.length > 0) setGeselecteerdId(data[0].id);
-        }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message ?? "Er ging iets mis");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadAll();
-    return () => {
-      cancelled = true;
-    };
+          })
+        );
+      });
   }, []);
 
-  const gefilterdeLeden = useMemo(() => {
-    const zoek = norm(zoekTerm);
-    if (!zoek) return leden;
-
-    return leden.filter((lid) => {
-      return (
-        norm(lid.naam).includes(zoek) ||
-        norm(lid.email).includes(zoek) ||
-        norm(lid.les).includes(zoek) ||
-        norm(lid.les2).includes(zoek) ||
-        norm(lid.soort).includes(zoek)
-      );
-    });
-  }, [leden, zoekTerm]);
-
-  const groepen = useMemo(() => {
-    if (rol === "eigenaar") return groupByLesBoth(gefilterdeLeden);
-    return groupByLesForDocent(gefilterdeLeden, allowedLessons);
-  }, [gefilterdeLeden, rol, allowedLessons]);
-
-  const geselecteerdLid = gefilterdeLeden.find((lid) => lid.id === geselecteerdId) ?? null;
-
-  const { jarigVandaag, jarigMorgen } = useMemo(() => {
-    const vandaag = new Date();
-    const morgen = new Date();
-    morgen.setDate(vandaag.getDate() + 1);
-
-    const dVandaag = vandaag.getDate();
-    const mVandaag = vandaag.getMonth() + 1;
-    const dMorgen = morgen.getDate();
-    const mMorgen = morgen.getMonth() + 1;
-
-    const vandaagNamen: string[] = [];
-    const morgenNamen: string[] = [];
-
-    leden.forEach((lid) => {
-      const dm = getDagMaand(lid.geboortedatum);
-      if (!dm) return;
-      if (dm.dag === dVandaag && dm.maand === mVandaag) vandaagNamen.push(lid.naam);
-      else if (dm.dag === dMorgen && dm.maand === mMorgen) morgenNamen.push(lid.naam);
-    });
-
-    return { jarigVandaag: vandaagNamen, jarigMorgen: morgenNamen };
-  }, [leden]);
-
-  const totaalUniek = useMemo(() => {
-    const seen = new Set<string>();
-    for (const l of gefilterdeLeden) {
-      const k = lidKey(l);
-      if (k) seen.add(k);
-    }
-    return seen.size;
-  }, [gefilterdeLeden]);
+  const groepen = useMemo(() => groupByLesBoth(leden), [leden]);
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
-      <main className="min-h-screen bg-black text-white p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
+      <main className="min-h-screen bg-black text-white p-6">
+        <h1 className="text-2xl font-bold text-pink-500 mb-6">Leden</h1>
 
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Zoek op naam, email, les of soort..."
-            value={zoekTerm}
-            onChange={(e) => setZoekTerm(e.target.value)}
-            className="w-full rounded bg-zinc-900 border border-zinc-700 p-2 text-white"
-          />
-        </div>
+        <div className="space-y-4">
+          {groepen.map(([les, lijst], i) => {
+            const p = rainbow[i % rainbow.length];
+            const c = countSoorten(lijst);
+            const active = activeLes === les;
 
-        {loading && <p className="text-gray-400">Laden…</p>}
-        {error && <p className="text-red-400">{error}</p>}
-
-        {!loading && !error && totaalUniek === 0 && <p className="text-gray-400">Geen leden gevonden.</p>}
-
-        {!loading && !error && totaalUniek > 0 && (
-          <>
-            <div className="text-sm text-gray-300 mb-3">{totaalUniek} leden (gegroepeerd per les)</div>
-
-            <div className="space-y-4">
-              {groepen.map(([lesNaam, lijst], index) => {
-                const c = countSoorten(lijst);
-                const palette = rainbowCard[index % rainbowCard.length];
-
-                // ✅ Actief als je één van deze leden open/gekozen hebt
-                const isActive = geselecteerdId
-                  ? lijst.some((l) => clean(l.id) === clean(geselecteerdId))
-                  : false;
-
-                return (
-                  <div
-                    key={lesNaam}
-                    className={[
-                      "rounded-2xl overflow-hidden border transition-all",
-                      palette.bg,
-                      palette.border,
-                      isActive
-                        ? `ring-1 ${palette.ring} ${palette.glow} brightness-[1.08]`
-                        : "shadow-md hover:brightness-[1.03]",
-                    ].join(" ")}
-                  >
-                    {/* ✅ TELLING ONDER TITEL */}
-                    <div className="px-4 py-3 border-b border-white/10">
-                      <div className="font-semibold">{lesNaam}</div>
-                      <div className="text-sm text-gray-300 mt-1">
-                        {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
-                      </div>
-                    </div>
-
-                    <ul className="max-h-64 overflow-y-auto">
-                      {lijst.map((lid) => {
-                        const actief = lid.id === geselecteerdId;
-
-                        return (
-                          <li key={`${lesNaam}-${lidKey(lid)}`}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setGeselecteerdId(lid.id);
-                                setShowModal(true);
-                              }}
-                              className={[
-                                "w-full text-left px-4 py-3 text-sm border-b border-white/5 transition-colors",
-                                "hover:bg-white/5",
-                                actief ? "bg-white/8" : "",
-                              ].join(" ")}
-                            >
-                              <div className="font-semibold">{lid.naam}</div>
-                              <div className="text-xs text-gray-300/80 truncate">{soortLabel(lid.soort)}</div>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+            return (
+              <div
+                key={les}
+                onClick={() => setActiveLes(les)}
+                className={[
+                  "rounded-2xl border transition-all cursor-pointer",
+                  p.bg,
+                  p.border,
+                  active
+                    ? `ring-1 ${p.ring} ${p.glow} brightness-[1.08]`
+                    : "hover:brightness-[1.04]",
+                ].join(" ")}
+              >
+                <div className="px-4 py-3 border-b border-white/10">
+                  <div className={`font-semibold ${p.text}`}>{les}</div>
+                  <div className="text-sm text-gray-300 mt-1">
+                    {c.totaal} leden • {c.abonnement} abonnement • {c.rittenkaart} rittenkaart
                   </div>
-                );
-              })}
-            </div>
+                </div>
 
-            <div className="space-y-1 mt-6 text-sm">
-              {jarigVandaag.length > 0 && (
-                <p className="text-pink-400">🎉 Vandaag jarig: {jarigVandaag.join(", ")}</p>
-              )}
-              {jarigMorgen.length > 0 && (
-                <p className="text-pink-300">🎂 Morgen jarig: {jarigMorgen.join(", ")}</p>
-              )}
-            </div>
-          </>
-        )}
-
-        {showModal && geselecteerdLid && (
-          <DetailModal lid={geselecteerdLid} onClose={() => setShowModal(false)} />
-        )}
+                <ul>
+                  {lijst.map((l) => (
+                    <li key={lidKey(l)} className="px-4 py-3 border-t border-white/5">
+                      <div className="font-medium">{l.naam}</div>
+                      <div className="text-xs text-gray-400">{soortLabel(l.soort)}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
       </main>
     </AuthGuard>
-  );
-}
-
-/* ---------- Detail componenten ---------- */
-
-function Detail({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">{label}</div>
-      <div className="whitespace-pre-line text-sm">{value}</div>
-    </div>
-  );
-}
-
-function WhatsAppIcon() {
-  return <img src="/whatsapp.png" alt="WhatsApp" className="w-5 h-5" />;
-}
-
-function DetailModal({ lid, onClose }: { lid: Lid; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-2xl p-6 relative max-h-[90vh] overflow-y-auto">
-        <button
-          className="absolute right-4 top-4 text-gray-400 hover:text-white text-xl"
-          onClick={onClose}
-          aria-label="Sluiten"
-        >
-          ×
-        </button>
-
-        <h2 className="text-xl font-bold text-pink-400 mb-1">{lid.naam}</h2>
-        <p className="text-sm text-gray-400 mb-4">
-          {soortLabel(lid.soort)}
-          {lid.les ? ` • ${lid.les}` : ""}
-          {lid.les2 ? ` • 2e les: ${lid.les2}` : ""}
-        </p>
-
-        <div className="grid grid-cols-1 gap-4 text-sm">
-          <Detail
-            label="Email"
-            value={
-              lid.email ? (
-                <a href={`mailto:${lid.email}`} className="text-pink-400 underline break-all">
-                  {lid.email}
-                </a>
-              ) : (
-                <span>-</span>
-              )
-            }
-          />
-
-          <Detail
-            label="Telefoon"
-            value={
-              <>
-                {lid.tel1 && (
-                  <div className="mb-1 flex items-center gap-2">
-                    <a href={`tel:${formatTelefoon(lid.tel1)}`} className="text-pink-400 underline">
-                      {formatTelefoon(lid.tel1)}
-                    </a>
-                    <a
-                      href={formatWhatsAppUrl(lid.tel1)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="WhatsApp"
-                      className="inline-flex"
-                    >
-                      <WhatsAppIcon />
-                    </a>
-                  </div>
-                )}
-                {lid.tel2 && (
-                  <div className="flex items-center gap-2">
-                    <a href={`tel:${formatTelefoon(lid.tel2)}`} className="text-pink-400 underline">
-                      {formatTelefoon(lid.tel2)}
-                    </a>
-                    <a
-                      href={formatWhatsAppUrl(lid.tel2)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="WhatsApp"
-                      className="inline-flex"
-                    >
-                      <WhatsAppIcon />
-                    </a>
-                  </div>
-                )}
-                {!lid.tel1 && !lid.tel2 && <span>-</span>}
-              </>
-            }
-          />
-
-          <Detail label="Soort" value={soortLabel(lid.soort)} />
-          <Detail label="Toestemming beeldmateriaal" value={lid.toestemming || "-"} />
-          <Detail label="Geboortedatum" value={formatDatum(lid.geboortedatum) || "-"} />
-          <Detail label="Adres" value={lid.adres ? `${lid.adres}\n${lid.postcode} ${lid.plaats}` : "-"} />
-          <Detail
-            label="Datum akkoord voorwaarden"
-            value={formatDatum(lid.datumGoedkeuring) || "-"}
-          />
-        </div>
-
-        <button
-          className="mt-6 w-full bg-pink-500 hover:bg-pink-600 transition-colors rounded-full py-3 font-semibold"
-          onClick={onClose}
-        >
-          Sluiten
-        </button>
-      </div>
-    </div>
   );
 }
