@@ -27,7 +27,6 @@ export default function HomePage() {
 
         const r: Rol = (data?.rol ?? "gast") as Rol;
 
-        // ✅ Lid gaat meteen naar eigen pagina
         if (r === "lid") {
           if (!cancelled) router.replace("/mijn");
           return;
@@ -43,7 +42,6 @@ export default function HomePage() {
     }
 
     check();
-
     return () => {
       cancelled = true;
     };
@@ -52,9 +50,7 @@ export default function HomePage() {
   async function uitloggen() {
     try {
       await fetch("/api/logout", { method: "POST" });
-    } catch {
-      // negeren
-    }
+    } catch {}
 
     if (typeof window !== "undefined") {
       localStorage.removeItem("ingelogd");
@@ -76,41 +72,42 @@ export default function HomePage() {
   const isAdmin = rol === "eigenaar" || rol === "docent";
 
   return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
-      <img src="/logo.png" alt="TDA Logo" className="w-52 mb-6" />
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 text-center">
+      {/* LOGO */}
+      <img
+        src="/logo.png"
+        alt="TDA Logo"
+        className="w-64 md:w-72 mb-8"
+      />
 
-      {/* ✅ Nieuwe titel */}
-      <h1 className="text-4xl font-extrabold text-white mb-6">
+      {/* TITEL */}
+      <h1 className="text-white text-4xl md:text-5xl font-extrabold tracking-wide mb-8">
         Tati&apos;s Dance Agency
       </h1>
 
       {rol && (
         <p className="mb-6 text-sm text-gray-400">
-          Ingelogd als:{" "}
+          Ingelogd als{" "}
           <span className="text-pink-400 font-semibold">{rol}</span>
         </p>
       )}
 
-      {isAdmin ? (
-        <div className="flex gap-4 mb-6">
+      {isAdmin && (
+        <div className="flex gap-4 mb-8">
           <Link
             href="/leden"
-            className="bg-pink-500 text-black font-semibold px-6 py-3 rounded-full"
+            className="bg-pink-500 text-black font-semibold px-7 py-3 rounded-full hover:bg-pink-600 transition"
           >
             Leden
           </Link>
 
           <Link
             href="/lessen"
-            className="border border-pink-500 text-pink-500 font-semibold px-6 py-3 rounded-full"
+            className="border border-pink-500 text-pink-500 font-semibold px-7 py-3 rounded-full hover:bg-pink-500/10 transition"
           >
             Lesgroepen
           </Link>
         </div>
-      ) : (
-        <p className="text-gray-400 mb-6 text-sm">
-          Je hebt geen beheerrechten op deze startpagina.
-        </p>
       )}
 
       <button onClick={uitloggen} className="text-gray-400 underline text-sm">
