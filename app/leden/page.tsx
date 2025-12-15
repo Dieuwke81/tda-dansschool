@@ -81,11 +81,13 @@ function soortType(raw: unknown) {
 function countSoorten(lijst: Lid[]) {
   let abonnement = 0,
     rittenkaart = 0;
+
   for (const l of lijst) {
     const t = soortType(l.soort);
     if (t === "abonnement") abonnement++;
     else if (t === "rittenkaart") rittenkaart++;
   }
+
   return { abonnement, rittenkaart, totaal: lijst.length };
 }
 
@@ -101,6 +103,7 @@ function sortAndUniqGroups(groups: Map<string, Lid[]>) {
         seen.add(k);
         return true;
       });
+
       uniek.sort((a, b) => clean(a.naam).localeCompare(clean(b.naam), "nl"));
       return [les, uniek] as const;
     })
@@ -109,24 +112,32 @@ function sortAndUniqGroups(groups: Map<string, Lid[]>) {
 
 function groupByLesBoth(leden: Lid[]) {
   const groups = new Map<string, Lid[]>();
+
   for (const l of leden) {
-    if (l.les) (groups.get(l.les) ?? groups.set(l.les, []).get(l.les)!).push(l);
-    if (l.les2) (groups.get(l.les2) ?? groups.set(l.les2, []).get(l.les2)!).push(l);
+    if (l.les) {
+      if (!groups.has(l.les)) groups.set(l.les, []);
+      groups.get(l.les)!.push(l);
+    }
+    if (l.les2) {
+      if (!groups.has(l.les2)) groups.set(l.les2, []);
+      groups.get(l.les2)!.push(l);
+    }
   }
+
   return sortAndUniqGroups(groups);
 }
 
-/* ================= REGENBOOG PALET ================= */
+/* ================= REGENBOOG KLEUREN ================= */
 
 const rainbow = [
-  { bg: "bg-rose-500/8", border: "border-rose-400/60", text: "text-rose-300", ring: "ring-rose-400/40", glow: "shadow-[0_0_30px_rgba(244,63,94,0.28)]" },
-  { bg: "bg-orange-500/8", border: "border-orange-400/60", text: "text-orange-300", ring: "ring-orange-400/40", glow: "shadow-[0_0_30px_rgba(249,115,22,0.28)]" },
-  { bg: "bg-amber-500/8", border: "border-amber-400/60", text: "text-amber-300", ring: "ring-amber-400/40", glow: "shadow-[0_0_30px_rgba(245,158,11,0.26)]" },
-  { bg: "bg-lime-500/8", border: "border-lime-400/60", text: "text-lime-300", ring: "ring-lime-400/40", glow: "shadow-[0_0_30px_rgba(163,230,53,0.24)]" },
-  { bg: "bg-emerald-500/8", border: "border-emerald-400/60", text: "text-emerald-300", ring: "ring-emerald-400/40", glow: "shadow-[0_0_30px_rgba(16,185,129,0.24)]" },
-  { bg: "bg-sky-500/8", border: "border-sky-400/60", text: "text-sky-300", ring: "ring-sky-400/40", glow: "shadow-[0_0_30px_rgba(14,165,233,0.24)]" },
-  { bg: "bg-indigo-500/8", border: "border-indigo-400/60", text: "text-indigo-300", ring: "ring-indigo-400/40", glow: "shadow-[0_0_30px_rgba(99,102,241,0.24)]" },
-  { bg: "bg-violet-500/8", border: "border-violet-400/60", text: "text-violet-300", ring: "ring-violet-400/40", glow: "shadow-[0_0_30px_rgba(139,92,246,0.24)]" },
+  { bg: "bg-rose-500/10", border: "border-rose-400/70", text: "text-rose-300", ring: "ring-rose-400/40" },
+  { bg: "bg-orange-500/10", border: "border-orange-400/70", text: "text-orange-300", ring: "ring-orange-400/40" },
+  { bg: "bg-amber-500/10", border: "border-amber-400/70", text: "text-amber-300", ring: "ring-amber-400/40" },
+  { bg: "bg-lime-500/10", border: "border-lime-400/70", text: "text-lime-300", ring: "ring-lime-400/40" },
+  { bg: "bg-emerald-500/10", border: "border-emerald-400/70", text: "text-emerald-300", ring: "ring-emerald-400/40" },
+  { bg: "bg-sky-500/10", border: "border-sky-400/70", text: "text-sky-300", ring: "ring-sky-400/40" },
+  { bg: "bg-indigo-500/10", border: "border-indigo-400/70", text: "text-indigo-300", ring: "ring-indigo-400/40" },
+  { bg: "bg-violet-500/10", border: "border-violet-400/70", text: "text-violet-300", ring: "ring-violet-400/40" },
 ];
 
 /* ================= PAGINA ================= */
@@ -134,12 +145,14 @@ const rainbow = [
 export default function LedenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
   const [rol, setRol] = useState<Rol>("docent");
+  const [zoekTerm, setZoekTerm] = useState("");
   const [activeLes, setActiveLes] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/session")
       .then((r) => r.json())
       .then((d: SessionResponse) => d?.rol && setRol(d.rol));
+
     fetch("/api/leden")
       .then((r) => r.text())
       .then((t) => {
@@ -168,12 +181,40 @@ export default function LedenPage() {
       });
   }, []);
 
-  const groepen = useMemo(() => groupByLesBoth(leden), [leden]);
+  const gefilterdeLeden = useMemo(() => {
+    const z = norm(zoekTerm);
+    if (!z) return leden;
+
+    return leden.filter(
+      (l) =>
+        norm(l.naam).includes(z) ||
+        norm(l.email).includes(z) ||
+        norm(l.les).includes(z) ||
+        norm(l.les2).includes(z) ||
+        norm(l.soort).includes(z)
+    );
+  }, [leden, zoekTerm]);
+
+  const groepen = useMemo(
+    () => groupByLesBoth(gefilterdeLeden),
+    [gefilterdeLeden]
+  );
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
-      <main className="min-h-screen bg-black text-white p-6">
-        <h1 className="text-2xl font-bold text-pink-500 mb-6">Leden</h1>
+      <main className="min-h-screen bg-black text-white p-4 md:p-6">
+        <h1 className="text-2xl font-bold text-pink-500 mb-4">Leden</h1>
+
+        {/* 🔍 ZOEK BALK */}
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Zoek op naam, email, les of soort..."
+            value={zoekTerm}
+            onChange={(e) => setZoekTerm(e.target.value)}
+            className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/40"
+          />
+        </div>
 
         <div className="space-y-4">
           {groepen.map(([les, lijst], i) => {
@@ -190,7 +231,7 @@ export default function LedenPage() {
                   p.bg,
                   p.border,
                   active
-                    ? `ring-1 ${p.ring} ${p.glow} brightness-[1.08]`
+                    ? `ring-2 ${p.ring} shadow-lg brightness-[1.08]`
                     : "hover:brightness-[1.04]",
                 ].join(" ")}
               >
@@ -205,7 +246,9 @@ export default function LedenPage() {
                   {lijst.map((l) => (
                     <li key={lidKey(l)} className="px-4 py-3 border-t border-white/5">
                       <div className="font-medium">{l.naam}</div>
-                      <div className="text-xs text-gray-400">{soortLabel(l.soort)}</div>
+                      <div className="text-xs text-gray-400">
+                        {soortLabel(l.soort)}
+                      </div>
                     </li>
                   ))}
                 </ul>
