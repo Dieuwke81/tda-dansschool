@@ -4,14 +4,11 @@ import { verifySession, cookieName, type Rol } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-/* ================= HELPERS ================= */
+// ✅ Zonder types-problemen op Vercel (geen @types/web-push nodig)
+const webpush: any = require("web-push");
 
 function clean(v: unknown) {
   return String(v ?? "").trim();
-}
-
-function json(ok: boolean, payload: Record<string, any>, status = 200) {
-  return NextResponse.json({ ok, ...payload }, { status });
 }
 
 async function requireSession(req: NextRequest) {
@@ -39,84 +36,71 @@ async function postToAppsScript(payload: any) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, secret }),
-    cache: "no-store",
   });
 
   const j = await r.json().catch(() => null);
-  if (!j?.ok) throw new Error(j?.error || "Apps Script fout");
+  if (!j?.ok) {
+    throw new Error(j?.error || "Apps Script fout");
+  }
   return j;
 }
 
-/* ================= WEB PUSH (zonder types package) ================= */
-
-let webpushReady = false;
-
-// dynamic require zodat TS niet klaagt over ontbrekende types
-function getWebPush(): any {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return require("web-push");
-}
-
-function setupWebPushOnce() {
-  if (webpushReady) return;
-
-  const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
+function ensureWebPushConfigured() {
+  const pub = process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
   const priv = process.env.VAPID_PRIVATE_KEY || "";
+  const subject = process.env.VAPID_SUBJECT || "mailto:info@tda-dansschool.nl";
 
-  if (!pub || !priv) {
-    throw new Error("VAPID keys ontbreken (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)");
-  }
+  if (!pub) throw new Error("VAPID_PUBLIC_KEY ontbreekt (Vercel env)");
+  if (!priv) throw new Error("VAPID_PRIVATE_KEY ontbreekt (Vercel env)");
 
-  const webpush = getWebPush();
-  webpush.setVapidDetails("mailto:info@tatisdanceagency.nl", pub, priv);
-  webpushReady = true;
+  webpush.setVapidDetails(subject, pub, priv);
 }
 
-type PushSubRow = {
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  enabled?: boolean;
-};
-
-async function sendPushToOwners(message: { title: string; body: string; url?: string }) {
-  setupWebPushOnce();
-  const webpush = getWebPush();
-
-  // Haal owner subscriptions uit je sheet (Apps Script)
-  // Als jouw Apps Script action anders heet: pas HIER aan.
-  const j = await postToAppsScript({
+async function sendPushToOwners(payload: {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+}) {
+  // 1) subscriptions ophalen (alle eigenaars)
+  const subsResp = await postToAppsScript({
     action: "listOwnerPush",
     rol: "eigenaar",
   });
 
-  const items: PushSubRow[] = Array.isArray(j?.items) ? j.items : [];
-  const subs = items
-    .filter((x) => x && x.endpoint && x.p256dh && x.auth)
-    .filter((x) => x.enabled !== false);
+  const items = Array.isArray(subsResp?.items) ? subsResp.items : [];
+  if (items.length === 0) {
+    return { sent: 0, failed: 0, reason: "Geen owner push subscriptions gevonden" };
+  }
 
-  if (subs.length === 0) return;
+  // 2) web-push config
+  ensureWebPushConfigured();
 
-  const payload = JSON.stringify({
-    title: message.title,
-    body: message.body,
-    url: message.url || "/wijzigingen",
+  // 3) versturen naar allemaal
+  let sent = 0;
+  let failed = 0;
+
+  const message = JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    url: payload.url || "/wijzigingen",
+    tag: payload.tag || "wijziging",
   });
 
-  await Promise.allSettled(
-    subs.map((s) =>
-      webpush.sendNotification(
-        {
-          endpoint: s.endpoint,
-          keys: { p256dh: s.p256dh, auth: s.auth },
-        },
-        payload
-      )
-    )
+  await Promise.all(
+    items.map(async (sub: any) => {
+      try {
+        await webpush.sendNotification(sub, message);
+        sent++;
+      } catch {
+        // ❗Niet verwijderen/disable (jij wil niks aan subscriptions wijzigen)
+        failed++;
+      }
+    })
   );
-}
 
-/* ================= ROUTES ================= */
+  return { sent, failed };
+}
 
 /**
  * GET /api/wijzigingen?status=NIEUW
@@ -124,9 +108,11 @@ async function sendPushToOwners(message: { title: string; body: string; url?: st
  */
 export async function GET(req: NextRequest) {
   const s = await requireSession(req);
-  if (!s.ok) return json(false, { error: s.error }, s.status);
+  if (!s.ok) return NextResponse.json({ ok: false, error: s.error }, { status: s.status });
 
-  if (s.rol !== "eigenaar") return json(false, { error: "Geen toegang" }, 403);
+  if (s.rol !== "eigenaar") {
+    return NextResponse.json({ ok: false, error: "Geen toegang" }, { status: 403 });
+  }
 
   const status = req.nextUrl.searchParams.get("status") ?? "";
 
@@ -136,43 +122,44 @@ export async function GET(req: NextRequest) {
       status,
     });
 
-    return json(true, { items: j.items ?? [] }, 200);
+    return NextResponse.json({ ok: true, items: j.items ?? [] }, { status: 200 });
   } catch (e: any) {
-    return json(false, { error: String(e?.message || e) }, 500);
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
 }
 
 /**
  * POST /api/wijzigingen
- * Lid maakt wijzigingsverzoek + push naar eigenaars
+ * Lid maakt een wijzigingsverzoek aan
+ * ✅ EN: push naar alle eigenaars (alleen bij nieuw verzoek)
  */
 export async function POST(req: NextRequest) {
   const s = await requireSession(req);
-  if (!s.ok) return json(false, { error: s.error }, s.status);
+  if (!s.ok) return NextResponse.json({ ok: false, error: s.error }, { status: s.status });
 
   if (s.rol !== "lid") {
-    return json(false, { error: "Alleen leden kunnen dit aanvragen" }, 403);
+    return NextResponse.json({ ok: false, error: "Alleen leden kunnen dit aanvragen" }, { status: 403 });
   }
 
   let body: any = null;
   try {
     body = await req.json();
   } catch {
-    return json(false, { error: "Ongeldige invoer" }, 400);
+    return NextResponse.json({ ok: false, error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const lid_id = clean(body?.lid_id);
-  const veld = clean(body?.veld);
+  const lid_id = clean(body?.lid_id); // ✅ moet jouw unieke Leden.id zijn
+  const veld = clean(body?.veld); // bv. telefoon1 / email / toestemmingBeeldmateriaal
   const oud = clean(body?.oud);
   const nieuw = clean(body?.nieuw);
   const notitie = clean(body?.notitie);
 
   if (!lid_id || !veld) {
-    return json(false, { error: "lid_id en veld zijn verplicht" }, 400);
+    return NextResponse.json({ ok: false, error: "lid_id en veld zijn verplicht" }, { status: 400 });
   }
 
   try {
-    // 1) Opslaan in Wijzigingen sheet
+    // 1) verzoek opslaan
     const j = await postToAppsScript({
       action: "createChangeRequest",
       aangevraagd_door_username: s.username,
@@ -183,47 +170,66 @@ export async function POST(req: NextRequest) {
       notitie,
     });
 
-    // 2) Push (alleen bij verzoek)
+    const requestId = String(j?.id || "");
+
+    // 2) push sturen (best effort: request blijft sowieso opgeslagen)
+    let push = { sent: 0, failed: 0, error: "" as string | null };
+
     try {
-      await sendPushToOwners({
+      const r = await sendPushToOwners({
         title: "Nieuw wijzigingsverzoek",
-        body: `${veld}: "${oud || "-"}" → "${nieuw || "-"}" (lid_id: ${lid_id})`,
+        body: `Lid ${lid_id} wil "${veld}" aanpassen.`,
         url: "/wijzigingen",
+        tag: "wijziging-nieuw",
       });
-    } catch {
-      // best-effort: verzoek is wel aangemaakt
+      push.sent = r.sent;
+      push.failed = r.failed;
+    } catch (e: any) {
+      push.error = String(e?.message || e);
     }
 
-    return json(true, { id: j.id }, 200);
+    return NextResponse.json(
+      {
+        ok: true,
+        id: requestId,
+        push,
+      },
+      { status: 200 }
+    );
   } catch (e: any) {
-    return json(false, { error: String(e?.message || e) }, 500);
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
 }
 
 /**
  * PATCH /api/wijzigingen
  * Eigenaar zet status (GOEDGEKEURD / AFGEKEURD)
- * (Doorvoeren in Leden-sheet gebeurt in Apps Script bij setChangeRequestStatus)
+ * ✅ Apps Script past bij GOEDGEKEURD direct de Leden tab aan
  */
 export async function PATCH(req: NextRequest) {
   const s = await requireSession(req);
-  if (!s.ok) return json(false, { error: s.error }, s.status);
+  if (!s.ok) return NextResponse.json({ ok: false, error: s.error }, { status: s.status });
 
-  if (s.rol !== "eigenaar") return json(false, { error: "Geen toegang" }, 403);
+  if (s.rol !== "eigenaar") {
+    return NextResponse.json({ ok: false, error: "Geen toegang" }, { status: 403 });
+  }
 
   let body: any = null;
   try {
     body = await req.json();
   } catch {
-    return json(false, { error: "Ongeldige invoer" }, 400);
+    return NextResponse.json({ ok: false, error: "Ongeldige invoer" }, { status: 400 });
   }
 
   const id = clean(body?.id);
-  const status = clean(body?.status);
+  const status = clean(body?.status); // "GOEDGEKEURD" | "AFGEKEURD"
 
-  if (!id || !status) return json(false, { error: "id en status verplicht" }, 400);
+  if (!id || !status) {
+    return NextResponse.json({ ok: false, error: "id en status verplicht" }, { status: 400 });
+  }
+
   if (status !== "GOEDGEKEURD" && status !== "AFGEKEURD") {
-    return json(false, { error: "Ongeldige status" }, 400);
+    return NextResponse.json({ ok: false, error: "Status moet GOEDGEKEURD of AFGEKEURD zijn" }, { status: 400 });
   }
 
   try {
@@ -234,8 +240,8 @@ export async function PATCH(req: NextRequest) {
       behandeld_door: s.username || "eigenaar",
     });
 
-    return json(true, {}, 200);
+    return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: any) {
-    return json(false, { error: String(e?.message || e) }, 500);
+    return NextResponse.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
   }
 }
