@@ -1,26 +1,38 @@
+
 // public/sw.js
 
 self.addEventListener("push", (event) => {
-  let data = {};
-  try {
-    data = event.data ? event.data.json() : {};
-  } catch {
-    // fallback: tekst payload
-    data = { title: "TDA Dansschool", body: event.data?.text?.() || "" };
-  }
+  event.waitUntil(
+    (async () => {
+      let data = {};
+      try {
+        data = event.data ? event.data.json() : {};
+      } catch {
+        // fallback: tekst payload (async!)
+        let txt = "";
+        try {
+          txt = event.data ? await event.data.text() : "";
+        } catch {}
+        data = { title: "TDA Dansschool", body: txt || "Nieuwe melding" };
+      }
 
-  const title = data.title || "TDA Dansschool";
-  const body = data.body || "Nieuwe melding";
-  const url = data.url || "/";
+      const title = data.title || "TDA Dansschool";
+      const body = data.body || "Nieuwe melding";
+      const url = data.url || "/";
+      const tag = data.tag || "tda";
 
-  const options = {
-    body,
-    icon: "/logo.png",      // pas aan als je een nette icon hebt
-    badge: "/logo.png",     // idem
-    data: { url },
-  };
+      const options = {
+        body,
+        icon: "/logo.png",
+        badge: "/logo.png",
+        data: { url },
+        tag,          // groepeer meldingen
+        renotify: true,
+      };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+      await self.registration.showNotification(title, options);
+    })()
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -34,12 +46,22 @@ self.addEventListener("notificationclick", (event) => {
         includeUncontrolled: true,
       });
 
-      // als er al een tab open is: focus + navigeer
+      // liefst: focus bestaande app tab
       for (const client of allClients) {
-        if ("focus" in client) {
-          await client.focus();
-          if ("navigate" in client) await client.navigate(url);
-          return;
+        try {
+          // alleen dezelfde origin
+          const clientUrl = new URL(client.url);
+          const targetUrl = new URL(url, self.location.origin);
+
+          if (clientUrl.origin === targetUrl.origin) {
+            if ("focus" in client) await client.focus();
+            if ("navigate" in client && client.url !== targetUrl.href) {
+              await client.navigate(targetUrl.href);
+            }
+            return;
+          }
+        } catch {
+          // ignore
         }
       }
 
