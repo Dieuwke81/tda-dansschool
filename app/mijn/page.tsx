@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import AuthGuard from "../auth-guard";
 
 type MijnData = {
-  id?: string; // als /api/mijn dit al teruggeeft: top
+  id: string; // ✅ verplicht: we gebruiken NOOIT email als id
   naam: string;
   email: string;
   les: string;
-  tweedeles: string; // ✅ klopt met /api/mijn output
+  tweedeLes: string; // ✅ moet matchen met /api/mijn output
   soort: string;
   toestemmingBeeldmateriaal: string;
   telefoon1: string;
@@ -100,7 +100,33 @@ function Inner() {
           return;
         }
 
-        if (!cancelled) setData(d as MijnData);
+        // ✅ harde check: id MOET er zijn, anders geen wijzigingsflow
+        const id = String(d?.id ?? "").trim();
+        if (!id) {
+          if (!cancelled) {
+            setError("Je account heeft geen uniek id in de sheet (kolom 'id'). Neem contact op met de eigenaar.");
+          }
+          return;
+        }
+
+        // ✅ normalize naar MijnData shape (ook tweedeLes!)
+        const mapped: MijnData = {
+          id,
+          naam: String(d?.naam ?? ""),
+          email: String(d?.email ?? ""),
+          les: String(d?.les ?? ""),
+          tweedeLes: String(d?.tweedeLes ?? ""), // ✅ let op: tweedeLes
+          soort: String(d?.soort ?? ""),
+          toestemmingBeeldmateriaal: String(d?.toestemmingBeeldmateriaal ?? ""),
+          telefoon1: String(d?.telefoon1 ?? ""),
+          telefoon2: String(d?.telefoon2 ?? ""),
+          geboortedatum: String(d?.geboortedatum ?? ""),
+          adres: String(d?.adres ?? ""),
+          postcode: String(d?.postcode ?? ""),
+          plaats: String(d?.plaats ?? ""),
+        };
+
+        if (!cancelled) setData(mapped);
       } catch {
         if (!cancelled) setError("Kon je gegevens niet ophalen");
       } finally {
@@ -153,12 +179,8 @@ function Inner() {
       return;
     }
 
-    // lid_id: als /api/mijn geen id teruggeeft, gebruiken we email als fallback
-    const lid_id = String((data as any).id ?? data.email ?? "").trim();
-    if (!lid_id) {
-      setToast("Kan lid_id niet bepalen (id/email ontbreekt).");
-      return;
-    }
+    // ✅ ALTIJD unieke id uit sheet gebruiken
+    const lid_id = data.id;
 
     setSending(true);
     setToast("");
@@ -181,7 +203,6 @@ function Inner() {
       if (!r.ok || !j?.ok) throw new Error(j?.error || "Kon wijzigingsverzoek niet versturen");
 
       setToast("✅ Verzoek verstuurd. De eigenaar moet dit eerst goedkeuren.");
-      // laat modal even open zodat ze het zien
       setTimeout(() => {
         closeEdit();
       }, 900);
@@ -226,14 +247,15 @@ function Inner() {
       <div className="w-full max-w-xl bg-zinc-900 rounded-xl p-6 border border-zinc-700">
         <h1 className="text-2xl font-bold text-pink-500 mb-2">Mijn gegevens</h1>
         <p className="text-sm text-gray-400 mb-5">
-          Wil je iets aanpassen? Klik op <span className="text-gray-200 font-semibold">Wijzigen</span>. De eigenaar moet dit eerst goedkeuren.
+          Wil je iets aanpassen? Klik op <span className="text-gray-200 font-semibold">Wijzigen</span>. De eigenaar
+          moet dit eerst goedkeuren.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <Field label="Naam" value={data.naam} onEdit={() => openEdit("naam")} />
           <Field label="Email" value={data.email} onEdit={() => openEdit("email")} />
           <Field label="Les" value={data.les} />
-          <Field label="2e les" value={data.tweedeles} />
+          <Field label="2e les" value={data.tweedeLes} />
           <Field label="Soort" value={data.soort} />
           <Field
             label="Toestemming beeldmateriaal"
