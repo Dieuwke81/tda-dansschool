@@ -1,7 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, cookieName, type Rol } from "@/lib/auth";
-import webpush from "web-push";
 
 export const runtime = "nodejs";
 
@@ -39,7 +38,6 @@ async function postToAppsScript(payload: any) {
   const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // apps script verwacht { ...payload, secret }
     body: JSON.stringify({ ...payload, secret }),
     cache: "no-store",
   });
@@ -49,9 +47,15 @@ async function postToAppsScript(payload: any) {
   return j;
 }
 
-/* ================= WEB PUSH ================= */
+/* ================= WEB PUSH (zonder types package) ================= */
 
 let webpushReady = false;
+
+// dynamic require zodat TS niet klaagt over ontbrekende types
+function getWebPush(): any {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require("web-push");
+}
 
 function setupWebPushOnce() {
   if (webpushReady) return;
@@ -60,11 +64,10 @@ function setupWebPushOnce() {
   const priv = process.env.VAPID_PRIVATE_KEY || "";
 
   if (!pub || !priv) {
-    // Niet hard crashen hier; we gooien een nette error waar nodig
     throw new Error("VAPID keys ontbreken (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)");
   }
 
-  // mailto mag wat jij wil (is alleen contact info)
+  const webpush = getWebPush();
   webpush.setVapidDetails("mailto:info@tatisdanceagency.nl", pub, priv);
   webpushReady = true;
 }
@@ -78,9 +81,10 @@ type PushSubRow = {
 
 async function sendPushToOwners(message: { title: string; body: string; url?: string }) {
   setupWebPushOnce();
+  const webpush = getWebPush();
 
   // Haal owner subscriptions uit je sheet (Apps Script)
-  // >>> Als jouw Apps Script action anders heet: pas HIER aan.
+  // Als jouw Apps Script action anders heet: pas HIER aan.
   const j = await postToAppsScript({
     action: "listOwnerPush",
     rol: "eigenaar",
@@ -99,14 +103,13 @@ async function sendPushToOwners(message: { title: string; body: string; url?: st
     url: message.url || "/wijzigingen",
   });
 
-  // Best-effort: push fouten mogen je API-call niet laten falen
   await Promise.allSettled(
     subs.map((s) =>
       webpush.sendNotification(
         {
           endpoint: s.endpoint,
           keys: { p256dh: s.p256dh, auth: s.auth },
-        } as any,
+        },
         payload
       )
     )
@@ -141,7 +144,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/wijzigingen
- * Lid maakt een wijzigingsverzoek aan + push naar eigenaars
+ * Lid maakt wijzigingsverzoek + push naar eigenaars
  */
 export async function POST(req: NextRequest) {
   const s = await requireSession(req);
@@ -180,8 +183,7 @@ export async function POST(req: NextRequest) {
       notitie,
     });
 
-    // 2) Push naar alle eigenaars (alleen bij verzoek)
-    // Best-effort: als push faalt, verzoek is wél aangemaakt
+    // 2) Push (alleen bij verzoek)
     try {
       await sendPushToOwners({
         title: "Nieuw wijzigingsverzoek",
@@ -189,7 +191,7 @@ export async function POST(req: NextRequest) {
         url: "/wijzigingen",
       });
     } catch {
-      // bewust negeren; je ziet verzoek sowieso in de sheet + in de pagina
+      // best-effort: verzoek is wel aangemaakt
     }
 
     return json(true, { id: j.id }, 200);
@@ -201,7 +203,7 @@ export async function POST(req: NextRequest) {
 /**
  * PATCH /api/wijzigingen
  * Eigenaar zet status (GOEDGEKEURD / AFGEKEURD)
- * (Doorvoeren in Leden-sheet gebeurt in jouw Apps Script bij setChangeRequestStatus)
+ * (Doorvoeren in Leden-sheet gebeurt in Apps Script bij setChangeRequestStatus)
  */
 export async function PATCH(req: NextRequest) {
   const s = await requireSession(req);
@@ -217,7 +219,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const id = clean(body?.id);
-  const status = clean(body?.status); // GOEDGEKEURD | AFGEKEURD
+  const status = clean(body?.status);
 
   if (!id || !status) return json(false, { error: "id en status verplicht" }, 400);
   if (status !== "GOEDGEKEURD" && status !== "AFGEKEURD") {
