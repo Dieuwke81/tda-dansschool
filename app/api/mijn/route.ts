@@ -8,12 +8,10 @@ function clean(s: unknown) {
   return String(s ?? "").trim();
 }
 
-// normaliseer header namen (spaties/case stabiel)
 function h(s: unknown) {
   return clean(s).toLowerCase().replace(/\s+/g, " ");
 }
 
-// simpele CSV parser (werkt ook met komma’s in quotes)
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
@@ -99,7 +97,6 @@ export async function GET(req: NextRequest) {
     map[h(name)] = i;
   });
 
-  // jouw sheet headers (letterlijk)
   const iUsername = idx(map, "username");
   if (iUsername === -1) {
     return NextResponse.json(
@@ -117,13 +114,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Account niet gevonden" }, { status: 404 });
   }
 
-  // kolommen ophalen op naam (als een kolom ontbreekt -> leeg)
   const get = (name: string) => {
     const i = idx(map, name);
     return i === -1 ? "" : clean(row[i]);
   };
 
   return NextResponse.json({
+    id: get("id"), // ⭐️ BELANGRIJK
     naam: get("naam"),
     email: get("email"),
     les: get("les"),
