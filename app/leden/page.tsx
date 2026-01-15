@@ -178,6 +178,24 @@ export default function LedenPage() {
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
+      {/* ===== VOEG ANIMATIE STYLES TOE ===== */}
+      <style jsx global>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .animate-slide-up {
+          animation: slideUp 0.35s ease-out forwards;
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
+      `}</style>
+
       <main className="min-h-screen bg-black text-white">
         {/* ===== STICKY HEADER ===== */}
         <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-4">
@@ -250,11 +268,11 @@ export default function LedenPage() {
 
         {/* ===== DETAIL VENSTER (MODAL) ===== */}
         {geselecteerdLid && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
             {/* Klik buiten venster om te sluiten */}
             <div className="absolute inset-0" onClick={() => setGeselecteerd(null)} />
             
-            <div className="relative w-full max-w-lg bg-zinc-900 border-t sm:border border-white/20 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden">
+            <div className="relative w-full max-w-lg bg-zinc-900 border-t sm:border border-white/20 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
               {/* Swipe indicator voor mobiel */}
               <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
 
