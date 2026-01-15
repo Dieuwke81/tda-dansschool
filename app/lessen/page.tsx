@@ -25,11 +25,16 @@ type LesKosten = {
 
 /* ================= HULPFUNCTIES ================= */
 
-// Verandert een string met komma (18,40) naar een getal dat de computer snapt (18.40)
+/**
+ * Maakt een getal van tekst uit de sheet.
+ * Verwijdert € tekens, spaties en zet komma's om naar punten.
+ */
 function toNum(val: string): number {
   if (!val) return 0;
-  const cleaned = val.replace(",", ".");
-  return parseFloat(cleaned) || 0;
+  // Haal alles weg wat geen cijfer, komma of punt is (zoals het € teken)
+  const cleaned = val.replace(/[^0-9,.-]/g, "").replace(",", ".");
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -71,6 +76,7 @@ export default function LessenPage() {
   const [kostenLijst, setKostenLijst] = useState<LesKosten[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Standaard maandprijzen (Bruto incl. BTW)
   const PRIJS_ONDER_18 = 35;
   const PRIJS_18_TOT_21 = 37.50;
   const PRIJS_BOVEN_21 = 40;
@@ -79,6 +85,7 @@ export default function LessenPage() {
     async function loadData() {
       try {
         setLoading(true);
+        // 1. Leden ophalen
         const resLeden = await fetch("/api/leden", { cache: "no-store" });
         const textLeden = await resLeden.text();
         const [, ...rowsLeden] = textLeden.trim().split("\n");
@@ -87,6 +94,7 @@ export default function LessenPage() {
           return { id: c[0], naam: c[1], les: c[3], les2: c[4], soort: c[5], geboortedatum: c[9] };
         }));
 
+        // 2. Kosten & BTW ophalen
         const resKosten = await fetch("/api/lessen", { cache: "no-store" });
         const textKosten = await resKosten.text();
         const [, ...rowsKosten] = textKosten.trim().split("\n");
@@ -101,7 +109,11 @@ export default function LessenPage() {
             btw21plus: toNum(c[5]),
           };
         }));
-      } catch (err) { console.error(err); } finally { setLoading(false); }
+      } catch (err) { 
+        console.error("Fout bij laden data:", err); 
+      } finally { 
+        setLoading(false); 
+      }
     }
     loadData();
   }, []);
@@ -118,14 +130,16 @@ export default function LessenPage() {
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white pb-10">
-        <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-6">
-          <h1 className="text-3xl font-bold text-center text-pink-500">Financieel Overzicht</h1>
-          <p className="text-center text-gray-400 text-xs mt-1">Berekening per maand (4 lessen) • BTW verrekend</p>
+        <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-6 text-center">
+          <h1 className="text-3xl font-bold text-pink-500">Financieel Overzicht</h1>
+          <p className="text-gray-400 text-xs mt-1 italic">
+            Berekening per maand (4 lessen) • BTW verrekend
+          </p>
         </div>
 
         <div className="p-4 max-w-2xl mx-auto space-y-4">
           {loading ? (
-            <p className="text-center text-gray-500 mt-10 italic">Data ophalen...</p>
+            <p className="text-center text-gray-500 mt-10 animate-pulse">Data uit de sheet ophalen...</p>
           ) : (
             alleLessen.map(les => {
               const ledenInLes = leden.filter(l => 
@@ -159,7 +173,8 @@ export default function LessenPage() {
                 }
 
                 brutoInkomsten += prijs;
-                // BTW berekening: Prijs is incl. BTW. Formule: Prijs - (Prijs / (1 + (percentage/100)))
+                // BTW berekening: Prijs is incl. BTW. 
+                // Formule voor BTW bedrag: Bruto - (Bruto / (1 + percentage/100))
                 const btwBedrag = prijs - (prijs / (1 + (btwPerc / 100)));
                 totaalBtw += btwBedrag;
               });
@@ -171,10 +186,10 @@ export default function LessenPage() {
               const winst = nettoInkomsten - totaleKosten;
 
               return (
-                <div key={les} className="bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden shadow-xl">
+                <div key={les} className="bg-zinc-900 rounded-2xl border border-white/10 overflow-hidden shadow-lg">
                   <div className="p-4 bg-white/5 border-b border-white/10 flex justify-between items-center">
-                    <h2 className="font-bold text-lg text-white">{les}</h2>
-                    <div className={`px-3 py-1 rounded-full text-sm font-mono font-bold ${winst >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    <h2 className="font-bold text-lg text-white leading-tight pr-2">{les}</h2>
+                    <div className={`px-3 py-1 rounded-full text-sm font-mono font-bold whitespace-nowrap ${winst >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                       {winst >= 0 ? '+' : ''}€{winst.toFixed(2)}
                     </div>
                   </div>
@@ -183,10 +198,10 @@ export default function LessenPage() {
                     <div className="space-y-1">
                       <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Netto Omzet (ex. BTW)</p>
                       <p className="text-xl font-bold text-blue-400">€{nettoInkomsten.toFixed(2)}</p>
-                      <p className="text-[10px] text-gray-400 italic">Bruto: €{brutoInkomsten.toFixed(2)} | BTW: €{totaalBtw.toFixed(2)}</p>
+                      <p className="text-[10px] text-gray-400">Bruto: €{brutoInkomsten.toFixed(2)} | BTW: €{totaalBtw.toFixed(2)}</p>
                     </div>
 
-                    <div className="space-y-1 text-right sm:text-left">
+                    <div className="space-y-1 text-right">
                       <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Kosten (Maand)</p>
                       <p className="text-xl font-bold text-orange-400">€{totaleKosten.toFixed(2)}</p>
                       <div className="text-[10px] text-gray-400">
@@ -197,13 +212,20 @@ export default function LessenPage() {
                     </div>
                   </div>
 
-                  <div className="px-4 pb-4 flex gap-4">
-                     <div className="text-[10px] text-zinc-500">Leden: {cat1}x &lt;18 | {cat2}x 18-21 | {cat3}x 21+</div>
+                  <div className="px-4 pb-4 flex justify-between items-center border-t border-white/5 pt-3 mt-1">
+                     <div className="text-[10px] text-zinc-500 italic">
+                       Leden: {cat1}x &lt;18 | {cat2}x 18-21 | {cat3}x 21+
+                     </div>
+                     {k && (
+                       <div className="text-[10px] text-zinc-500">
+                         BTW: {k.btwOnder18}% / {k.btw18tot21}% / {k.btw21plus}%
+                       </div>
+                     )}
                   </div>
                   
                   {!k && (
-                    <div className="bg-amber-500/10 p-2 text-[10px] text-amber-500 text-center border-t border-amber-500/20 italic">
-                      Geen kosten/BTW data gevonden in sheet voor deze lesnaam.
+                    <div className="bg-amber-500/10 p-2 text-[10px] text-amber-500 text-center border-t border-amber-500/20">
+                      ⚠️ Geen match in sheet voor lesnaam gevonden.
                     </div>
                   )}
                 </div>
