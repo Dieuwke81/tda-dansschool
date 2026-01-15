@@ -74,6 +74,9 @@ export default function LessenPage() {
   const [leden, setLeden] = useState<Lid[]>([]);
   const [configs, setConfigs] = useState<LesConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // TOGGLE STATE: Inclusief of exclusief rittenkaarten
+  const [showRittenkaarten, setShowRittenkaarten] = useState(true);
 
   useEffect(() => {
     async function loadData() {
@@ -119,7 +122,7 @@ export default function LessenPage() {
     return Array.from(set).sort();
   }, [leden]);
 
-  // Bereken totalen voor de hele school
+  // Bereken totalen voor de hele school (reageert op toggle)
   const schoolTotalen = useMemo(() => {
     let nettoOmzet = 0;
     let kosten = 0;
@@ -130,31 +133,46 @@ export default function LessenPage() {
 
       ledenInLes.forEach(l => {
         let p = 0; let b = 0;
-        if (l.soort.toLowerCase().includes("rit")) {
-          p = (cfg?.prijsRittenkaart ?? 0) / 6;
-          b = cfg?.btw21plus ?? 0;
+        const isRit = l.soort.toLowerCase().includes("rit");
+        
+        // Alleen rekenen als het een abonnement is, OF als rittenkaarten aan staan
+        if (isRit) {
+          if (showRittenkaarten) {
+            p = (cfg?.prijsRittenkaart ?? 0) / 6;
+            b = cfg?.btw21plus ?? 0;
+            nettoOmzet += p / (1 + (b / 100));
+          }
         } else if (l.soort.toLowerCase().includes("abon")) {
           const age = berekenLeeftijd(l.geboortedatum);
           if (age < 18) { p = cfg?.prijsOnder18 ?? 0; b = cfg?.btwOnder18 ?? 0; }
           else if (age < 21) { p = cfg?.prijs18tot21 ?? 0; b = cfg?.btw18tot21 ?? 0; }
           else { p = cfg?.prijs21plus ?? 0; b = cfg?.btw21plus ?? 0; }
+          nettoOmzet += p / (1 + (b / 100));
         }
-        nettoOmzet += p / (1 + (b / 100));
       });
       kosten += ((cfg?.uurtarief || 0) * 4) + ((cfg?.zaalhuur || 0) * 4);
     });
 
     return { netto: nettoOmzet, kosten: kosten, winst: nettoOmzet - kosten };
-  }, [leden, alleLessen, configs]);
+  }, [leden, alleLessen, configs, showRittenkaarten]);
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
       <main className="min-h-screen bg-black text-white pb-24">
-        <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-6 text-center">
-          <h1 className="text-3xl font-bold text-pink-500">Financieel Overzicht</h1>
-          <p className="text-gray-400 text-[10px] uppercase tracking-widest mt-1 italic">
-            Kosten & Zaalhuur verrekend op 0% BTW
-          </p>
+        {/* HEADER MET TOGGLE */}
+        <div className="sticky top-0 z-40 bg-black/95 backdrop-blur border-b border-white/10 px-4 pt-6 pb-4 text-center">
+          <h1 className="text-3xl font-bold text-pink-500 tracking-tight">Financieel Overzicht</h1>
+          
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${!showRittenkaarten ? 'text-white' : 'text-zinc-500'}`}>Abonnementen</span>
+            <button 
+              onClick={() => setShowRittenkaarten(!showRittenkaarten)}
+              className="relative w-12 h-6 bg-zinc-800 rounded-full p-1 transition-colors duration-200"
+            >
+              <div className={`w-4 h-4 bg-pink-500 rounded-full transition-transform duration-200 transform ${showRittenkaarten ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${showRittenkaarten ? 'text-white' : 'text-zinc-500'}`}>+ Rittenkaarten</span>
+          </div>
         </div>
 
         <div className="p-4 max-w-2xl mx-auto space-y-6">
@@ -162,9 +180,11 @@ export default function LessenPage() {
             <p className="text-center text-zinc-500 mt-10 animate-pulse font-medium">Laden...</p>
           ) : (
             <>
-              {/* TOTAAL OVERZICHT KAART */}
+              {/* TOTAAL OVERZICHT */}
               <div className="bg-pink-600 rounded-3xl p-6 shadow-2xl border border-pink-400/30 mb-2">
-                <p className="text-white/70 text-[10px] uppercase font-black tracking-widest mb-1">Totaal Rendement (Maand)</p>
+                <p className="text-white/70 text-[10px] uppercase font-black tracking-widest mb-1">
+                  School Rendement ({showRittenkaarten ? 'Totaal' : 'Alleen Abon.'})
+                </p>
                 <h2 className="text-4xl font-black text-white">€{schoolTotalen.winst.toFixed(2)}</h2>
                 <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs font-bold text-white/90">
                   <span>Netto Omzet: €{schoolTotalen.netto.toFixed(2)}</span>
@@ -172,38 +192,37 @@ export default function LessenPage() {
                 </div>
               </div>
 
-              {/* PER LES KAARTEN */}
+              {/* PER LES */}
               {alleLessen.map(les => {
                 const ledenInLes = leden.filter(l => norm(l.les) === norm(les) || norm(l.les2) === norm(les));
                 const cfg = configs.find(item => norm(item.lesnaam) === norm(les));
                 
-                let nettoA1 = 0; let nettoA2 = 0; let nettoA3 = 0; let nettoRit = 0;
+                let nettoAbon = 0; let nettoRit = 0;
                 let c1 = 0; let c2 = 0; let c3 = 0; let cRit = 0;
 
                 ledenInLes.forEach(l => {
-                  if (l.soort.toLowerCase().includes("rit")) {
+                  const isRit = l.soort.toLowerCase().includes("rit");
+                  if (isRit) {
                     const p = (cfg?.prijsRittenkaart ?? 0) / 6;
                     nettoRit += p / (1 + ((cfg?.btw21plus ?? 0) / 100));
                     cRit++;
                   } else if (l.soort.toLowerCase().includes("abon")) {
                     const age = berekenLeeftijd(l.geboortedatum);
-                    if (age < 18) { 
-                      nettoA1 += (cfg?.prijsOnder18 ?? 0) / (1 + ((cfg?.btwOnder18 ?? 0) / 100)); 
-                      c1++; 
-                    } else if (age < 21) { 
-                      nettoA2 += (cfg?.prijs18tot21 ?? 0) / (1 + ((cfg?.btw18tot21 ?? 0) / 100)); 
-                      c2++; 
-                    } else { 
-                      nettoA3 += (cfg?.prijs21plus ?? 0) / (1 + ((cfg?.btw21plus ?? 0) / 100)); 
-                      c3++; 
-                    }
+                    let p = 0; let b = 0;
+                    if (age < 18) { p = cfg?.prijsOnder18 ?? 0; b = cfg?.btwOnder18 ?? 0; c1++; } 
+                    else if (age < 21) { p = cfg?.prijs18tot21 ?? 0; b = cfg?.btw18tot21 ?? 0; c2++; } 
+                    else { p = cfg?.prijs21plus ?? 0; b = cfg?.btw21plus ?? 0; c3++; }
+                    nettoAbon += p / (1 + (b / 100));
                   }
                 });
 
                 const mDocent = (cfg?.uurtarief || 0) * 4;
                 const mZaal = (cfg?.zaalhuur || 0) * 4;
                 const totK = mDocent + mZaal;
-                const winst = (nettoA1 + nettoA2 + nettoA3 + nettoRit) - totK;
+                
+                // Hier wordt de winst per les berekend op basis van de toggle
+                const huidigeOmzet = showRittenkaarten ? (nettoAbon + nettoRit) : nettoAbon;
+                const winst = huidigeOmzet - totK;
 
                 return (
                   <div key={les} className="bg-zinc-900 rounded-3xl border border-white/5 overflow-hidden shadow-lg">
@@ -215,14 +234,13 @@ export default function LessenPage() {
                     </div>
 
                     <div className="p-5 space-y-5">
-                      {/* HOOFDCIJFERS */}
                       <div className="grid grid-cols-2 gap-8">
                         <div>
                           <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">Netto Omzet</p>
-                          <p className="text-2xl font-bold text-blue-400">€{(nettoA1 + nettoA2 + nettoA3 + nettoRit).toFixed(2)}</p>
+                          <p className="text-2xl font-bold text-blue-400">€{huidigeOmzet.toFixed(2)}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">Maandkosten (0%)</p>
+                          <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">Maandkosten</p>
                           <p className="text-2xl font-bold text-orange-400">€{totK.toFixed(2)}</p>
                         </div>
                       </div>
@@ -232,16 +250,16 @@ export default function LessenPage() {
                         <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest mb-3 border-b border-white/5 pb-1">Netto per categorie</p>
                         <div className="grid grid-cols-2 gap-y-2 text-[11px]">
                           <div className="flex justify-between pr-4 border-r border-white/5 text-zinc-400">
-                            <span>Abon &lt;18 ({c1}x):</span> <span className="text-zinc-200">€{nettoA1.toFixed(2)}</span>
+                            <span>Abon &lt;18 ({c1}x):</span> <span className="text-zinc-200 font-mono">€{(c1 > 0 ? (nettoAbon / (c1+c2+c3) * c1) : 0).toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between pl-4 text-zinc-400">
-                            <span>Abon 18-21 ({c2}x):</span> <span className="text-zinc-200">€{nettoA2.toFixed(2)}</span>
+                            <span>Abon 18-21 ({c2}x):</span> <span className="text-zinc-200 font-mono">€{(c2 > 0 ? (nettoAbon / (c1+c2+c3) * c2) : 0).toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between pr-4 border-r border-white/5 text-zinc-400">
-                            <span>Abon 21+ ({c3}x):</span> <span className="text-zinc-200">€{nettoA3.toFixed(2)}</span>
+                            <span>Abon 21+ ({c3}x):</span> <span className="text-zinc-200 font-mono">€{(c3 > 0 ? (nettoAbon / (c1+c2+c3) * c3) : 0).toFixed(2)}</span>
                           </div>
-                          <div className="flex justify-between pl-4 text-zinc-400">
-                            <span>Rittenk. ({cRit}x):</span> <span className="text-zinc-200">€{nettoRit.toFixed(2)}</span>
+                          <div className={`flex justify-between pl-4 transition-opacity duration-300 ${showRittenkaarten ? 'text-zinc-400' : 'opacity-20 text-zinc-600'}`}>
+                            <span>Rittenk. ({cRit}x):</span> <span className="font-mono">€{nettoRit.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
@@ -252,11 +270,11 @@ export default function LessenPage() {
                         <div className="flex justify-between text-[11px]">
                           <div className="flex flex-col">
                             <span className="text-zinc-500 text-[10px]">DOCENT</span>
-                            <span className="font-bold text-zinc-200">€{mDocent.toFixed(2)}</span>
+                            <span className="font-bold text-zinc-200 font-mono">€{mDocent.toFixed(2)}</span>
                           </div>
                           <div className="flex flex-col text-right">
                             <span className="text-zinc-500 text-[10px]">ZAALHUUR</span>
-                            <span className="font-bold text-zinc-200">€{mZaal.toFixed(2)}</span>
+                            <span className="font-bold text-zinc-200 font-mono">€{mZaal.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
