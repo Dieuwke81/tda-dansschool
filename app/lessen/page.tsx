@@ -119,29 +119,31 @@ export default function LessenPage() {
     return Array.from(set).sort();
   }, [leden]);
 
-  // Bereken totalen
-  const totalen = useMemo(() => {
+  // Bereken totalen voor de hele school
+  const schoolTotalen = useMemo(() => {
     let nettoOmzet = 0;
     let kosten = 0;
+
     alleLessen.forEach(les => {
       const cfg = configs.find(item => norm(item.lesnaam) === norm(les));
-      const ledenInLes = leden.filter(l => (norm(l.les) === norm(les) || norm(l.les2) === norm(les)));
+      const ledenInLes = leden.filter(l => norm(l.les) === norm(les) || norm(l.les2) === norm(les));
 
       ledenInLes.forEach(l => {
-        let prijs = 0; let btwPerc = 0;
+        let p = 0; let b = 0;
         if (l.soort.toLowerCase().includes("rit")) {
-          prijs = (cfg?.prijsRittenkaart ?? 0) / 6;
-          btwPerc = cfg?.btw21plus ?? 0;
+          p = (cfg?.prijsRittenkaart ?? 0) / 6;
+          b = cfg?.btw21plus ?? 0;
         } else if (l.soort.toLowerCase().includes("abon")) {
           const age = berekenLeeftijd(l.geboortedatum);
-          if (age < 18) { prijs = cfg?.prijsOnder18 ?? 0; btwPerc = cfg?.btwOnder18 ?? 0; }
-          else if (age < 21) { prijs = cfg?.prijs18tot21 ?? 0; btwPerc = cfg?.btw18tot21 ?? 0; }
-          else { prijs = cfg?.prijs21plus ?? 0; btwPerc = cfg?.btw21plus ?? 0; }
+          if (age < 18) { p = cfg?.prijsOnder18 ?? 0; b = cfg?.btwOnder18 ?? 0; }
+          else if (age < 21) { p = cfg?.prijs18tot21 ?? 0; b = cfg?.btw18tot21 ?? 0; }
+          else { p = cfg?.prijs21plus ?? 0; b = cfg?.btw21plus ?? 0; }
         }
-        nettoOmzet += prijs / (1 + (btwPerc / 100));
+        nettoOmzet += p / (1 + (b / 100));
       });
       kosten += ((cfg?.uurtarief || 0) * 4) + ((cfg?.zaalhuur || 0) * 4);
     });
+
     return { netto: nettoOmzet, kosten: kosten, winst: nettoOmzet - kosten };
   }, [leden, alleLessen, configs]);
 
@@ -150,82 +152,112 @@ export default function LessenPage() {
       <main className="min-h-screen bg-black text-white pb-24">
         <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-6 text-center">
           <h1 className="text-3xl font-bold text-pink-500">Financieel Overzicht</h1>
-          <p className="text-gray-400 text-[10px] uppercase tracking-widest mt-1">
-            Spreiding Rittenkaarten (6 mnd) verwerkt
+          <p className="text-gray-400 text-[10px] uppercase tracking-widest mt-1 italic">
+            Kosten & Zaalhuur verrekend op 0% BTW
           </p>
         </div>
 
-        <div className="p-4 max-w-2xl mx-auto space-y-5">
+        <div className="p-4 max-w-2xl mx-auto space-y-6">
           {loading ? (
-            <p className="text-center text-zinc-500 mt-10 animate-pulse">Laden...</p>
+            <p className="text-center text-zinc-500 mt-10 animate-pulse font-medium">Laden...</p>
           ) : (
             <>
-              {/* TOTAAL OVERZICHT */}
-              <div className="bg-pink-600 rounded-3xl p-6 shadow-2xl border border-pink-400/30">
+              {/* TOTAAL OVERZICHT KAART */}
+              <div className="bg-pink-600 rounded-3xl p-6 shadow-2xl border border-pink-400/30 mb-2">
                 <p className="text-white/70 text-[10px] uppercase font-black tracking-widest mb-1">Totaal Rendement (Maand)</p>
-                <h2 className="text-4xl font-black text-white">€{totalen.winst.toFixed(2)}</h2>
-                <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs font-bold text-white/80">
-                  <span>Netto Omzet: €{totalen.netto.toFixed(2)}</span>
-                  <span>Kosten: €{totalen.kosten.toFixed(2)}</span>
+                <h2 className="text-4xl font-black text-white">€{schoolTotalen.winst.toFixed(2)}</h2>
+                <div className="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs font-bold text-white/90">
+                  <span>Netto Omzet: €{schoolTotalen.netto.toFixed(2)}</span>
+                  <span>Kosten: €{schoolTotalen.kosten.toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* PER LES */}
+              {/* PER LES KAARTEN */}
               {alleLessen.map(les => {
                 const ledenInLes = leden.filter(l => norm(l.les) === norm(les) || norm(l.les2) === norm(les));
                 const cfg = configs.find(item => norm(item.lesnaam) === norm(les));
                 
-                let nettoAbon = 0; let nettoRit = 0;
-                let countAbon = 0; let countRit = 0;
+                let nettoA1 = 0; let nettoA2 = 0; let nettoA3 = 0; let nettoRit = 0;
+                let c1 = 0; let c2 = 0; let c3 = 0; let cRit = 0;
 
                 ledenInLes.forEach(l => {
                   if (l.soort.toLowerCase().includes("rit")) {
-                    const prijs = (cfg?.prijsRittenkaart ?? 0) / 6;
-                    nettoRit += prijs / (1 + ((cfg?.btw21plus ?? 0) / 100));
-                    countRit++;
+                    const p = (cfg?.prijsRittenkaart ?? 0) / 6;
+                    nettoRit += p / (1 + ((cfg?.btw21plus ?? 0) / 100));
+                    cRit++;
                   } else if (l.soort.toLowerCase().includes("abon")) {
                     const age = berekenLeeftijd(l.geboortedatum);
-                    let p = 0; let b = 0;
-                    if (age < 18) { p = cfg?.prijsOnder18 ?? 0; b = cfg?.btwOnder18 ?? 0; }
-                    else if (age < 21) { p = cfg?.prijs18tot21 ?? 0; b = cfg?.btw18tot21 ?? 0; }
-                    else { p = cfg?.prijs21plus ?? 0; b = cfg?.btw21plus ?? 0; }
-                    nettoAbon += p / (1 + (b / 100));
-                    countAbon++;
+                    if (age < 18) { 
+                      nettoA1 += (cfg?.prijsOnder18 ?? 0) / (1 + ((cfg?.btwOnder18 ?? 0) / 100)); 
+                      c1++; 
+                    } else if (age < 21) { 
+                      nettoA2 += (cfg?.prijs18tot21 ?? 0) / (1 + ((cfg?.btw18tot21 ?? 0) / 100)); 
+                      c2++; 
+                    } else { 
+                      nettoA3 += (cfg?.prijs21plus ?? 0) / (1 + ((cfg?.btw21plus ?? 0) / 100)); 
+                      c3++; 
+                    }
                   }
                 });
 
-                const totaleKosten = ((cfg?.uurtarief || 0) * 4) + ((cfg?.zaalhuur || 0) * 4);
-                const winst = (nettoAbon + nettoRit) - totaleKosten;
+                const mDocent = (cfg?.uurtarief || 0) * 4;
+                const mZaal = (cfg?.zaalhuur || 0) * 4;
+                const totK = mDocent + mZaal;
+                const winst = (nettoA1 + nettoA2 + nettoA3 + nettoRit) - totK;
 
                 return (
                   <div key={les} className="bg-zinc-900 rounded-3xl border border-white/5 overflow-hidden shadow-lg">
-                    <div className="p-5 bg-white/5 border-b border-white/5 flex justify-between items-center">
-                      <h2 className="font-extrabold text-base text-white">{les}</h2>
+                    <div className="p-5 bg-white/5 border-b border-white/10 flex justify-between items-start">
+                      <h2 className="font-extrabold text-lg text-white leading-tight flex-1 pr-4">{les}</h2>
                       <div className={`px-4 py-1.5 rounded-full text-sm font-mono font-bold ${winst >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                        €{winst.toFixed(2)}
+                        {winst >= 0 ? '+' : ''}€{winst.toFixed(2)}
                       </div>
                     </div>
 
-                    <div className="p-5 space-y-4">
-                      <div className="flex justify-between items-end">
+                    <div className="p-5 space-y-5">
+                      {/* HOOFDCIJFERS */}
+                      <div className="grid grid-cols-2 gap-8">
                         <div>
-                          <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Netto Omzet</p>
-                          <p className="text-2xl font-bold text-blue-400">€{(nettoAbon + nettoRit).toFixed(2)}</p>
+                          <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">Netto Omzet</p>
+                          <p className="text-2xl font-bold text-blue-400">€{(nettoA1 + nettoA2 + nettoA3 + nettoRit).toFixed(2)}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Maandkosten</p>
-                          <p className="text-2xl font-bold text-orange-400">€{totaleKosten.toFixed(2)}</p>
+                          <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">Maandkosten (0%)</p>
+                          <p className="text-2xl font-bold text-orange-400">€{totK.toFixed(2)}</p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/5">
-                        <div className="text-[10px] text-zinc-400">
-                          <span className="block font-bold text-zinc-200">Abonnementen ({countAbon})</span>
-                          €{nettoAbon.toFixed(2)} netto
+                      {/* INKOMSTEN SPLITSING */}
+                      <div className="bg-black/30 rounded-2xl p-4 border border-white/5">
+                        <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest mb-3 border-b border-white/5 pb-1">Netto per categorie</p>
+                        <div className="grid grid-cols-2 gap-y-2 text-[11px]">
+                          <div className="flex justify-between pr-4 border-r border-white/5 text-zinc-400">
+                            <span>Abon &lt;18 ({c1}x):</span> <span className="text-zinc-200">€{nettoA1.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between pl-4 text-zinc-400">
+                            <span>Abon 18-21 ({c2}x):</span> <span className="text-zinc-200">€{nettoA2.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between pr-4 border-r border-white/5 text-zinc-400">
+                            <span>Abon 21+ ({c3}x):</span> <span className="text-zinc-200">€{nettoA3.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between pl-4 text-zinc-400">
+                            <span>Rittenk. ({cRit}x):</span> <span className="text-zinc-200">€{nettoRit.toFixed(2)}</span>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-zinc-400 text-right">
-                          <span className="block font-bold text-zinc-200">Rittenkaarten ({countRit})</span>
-                          €{nettoRit.toFixed(2)} netto (1/6e deel)
+                      </div>
+
+                      {/* KOSTEN SPLITSING */}
+                      <div className="bg-black/30 rounded-2xl p-4 border border-white/5">
+                        <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest mb-3 border-b border-white/5 pb-1">Kosten uitsplitsing (4x)</p>
+                        <div className="flex justify-between text-[11px]">
+                          <div className="flex flex-col">
+                            <span className="text-zinc-500 text-[10px]">DOCENT</span>
+                            <span className="font-bold text-zinc-200">€{mDocent.toFixed(2)}</span>
+                          </div>
+                          <div className="flex flex-col text-right">
+                            <span className="text-zinc-500 text-[10px]">ZAALHUUR</span>
+                            <span className="font-bold text-zinc-200">€{mZaal.toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
