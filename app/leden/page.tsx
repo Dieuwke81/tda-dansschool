@@ -24,27 +24,27 @@ type Lid = {
 
 /* ================= HULPFUNCTIES ================= */
 
+// Maakt een nummer klaar voor WhatsApp (verwijdert spaties, +31 toevoegen indien nodig)
+function formatWhatsApp(tel: string): string {
+  let cleaned = tel.replace(/\D/g, ""); // Alleen cijfers overhouden
+  if (cleaned.startsWith("0")) {
+    cleaned = "31" + cleaned.substring(1); // 06 veranderen naar 316
+  }
+  return `https://wa.me/${cleaned}`;
+}
+
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } 
+      else { inQuotes = !inQuotes; }
       continue;
     }
-    if (ch === "," && !inQuotes) {
-      out.push(cur.trim());
-      cur = "";
-      continue;
-    }
+    if (ch === "," && !inQuotes) { out.push(cur.trim()); cur = ""; continue; }
     cur += ch;
   }
   out.push(cur.trim());
@@ -150,7 +150,7 @@ export default function LedenPage() {
           })
         );
       } catch (err) {
-        console.error("Fout bij laden leden:", err);
+        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -178,30 +178,18 @@ export default function LedenPage() {
 
   return (
     <AuthGuard allowedRoles={["eigenaar", "docent"]}>
-      {/* ===== VOEG ANIMATIE STYLES TOE ===== */}
+      {/* ANIMATIE STYLES */}
       <style jsx global>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .animate-slide-up {
-          animation: slideUp 0.35s ease-out forwards;
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease-out forwards;
-        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.35s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
       `}</style>
 
       <main className="min-h-screen bg-black text-white">
-        {/* ===== STICKY HEADER ===== */}
+        {/* STICKY HEADER */}
         <div className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-white/10 px-4 py-4">
-          <h1 className="text-3xl font-bold text-center mb-3 text-pink-500">
-            Leden
-          </h1>
+          <h1 className="text-3xl font-bold text-center mb-3 text-pink-500">Leden</h1>
           <input
             value={zoek}
             onChange={(e) => setZoek(e.target.value)}
@@ -210,141 +198,88 @@ export default function LedenPage() {
           />
         </div>
 
-        {/* ===== CONTENT ===== */}
+        {/* CONTENT */}
         <div className="p-4 space-y-5 pb-20">
           {loading && <p className="text-gray-400 text-center">Laden…</p>}
-
-          {!loading && groepen.length === 0 && (
-            <p className="text-gray-500 text-center mt-10">Geen leden gevonden.</p>
-          )}
 
           {groepen.map(([les, lijst], i) => {
             const kleur = rainbow[i % rainbow.length];
             const c = countSoorten(lijst);
-
             return (
-              <div
-                key={les}
-                className={`rounded-xl border ${kleur.border} bg-gradient-to-br ${kleur.bg}`}
-              >
+              <div key={les} className={`rounded-xl border ${kleur.border} bg-gradient-to-br ${kleur.bg}`}>
                 <div className="px-4 py-3 border-b border-white/10">
-                  <div className={`font-semibold text-lg ${kleur.text}`}>
-                    {les}
-                  </div>
-                  <div className="text-sm text-gray-300">
-                    {c.totaal} leden • {c.abonnement} abonnement •{" "}
-                    {c.rittenkaart} rittenkaart
-                  </div>
+                  <div className={`font-semibold text-lg ${kleur.text}`}>{les}</div>
+                  <div className="text-sm text-gray-300">{c.totaal} leden • {c.abonnement} abon.</div>
                 </div>
-
                 <ul className="max-h-[400px] overflow-y-auto">
-                  {lijst.map((l) => {
-                    const actief = l.id === geselecteerd;
-                    return (
-                      <li key={lidKey(l)}>
-                        <button
-                          onClick={() => setGeselecteerd(l.id)}
-                          className={`w-full text-left px-4 py-3 border-b border-white/5 transition ${
-                            actief
-                              ? "bg-white/20"
-                              : "hover:bg-white/5 active:bg-white/10"
-                          }`}
-                        >
-                          <div className="font-medium text-white">
-                            {l.naam}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {soortLabel(l.soort)}
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
+                  {lijst.map((l) => (
+                    <li key={lidKey(l)}>
+                      <button
+                        onClick={() => setGeselecteerd(l.id)}
+                        className={`w-full text-left px-4 py-3 border-b border-white/5 transition ${l.id === geselecteerd ? "bg-white/20" : "hover:bg-white/5"}`}
+                      >
+                        <div className="font-medium text-white">{l.naam}</div>
+                        <div className="text-xs text-gray-400">{soortLabel(l.soort)}</div>
+                      </button>
+                    </li>
+                  ))}
                 </ul>
               </div>
             );
           })}
         </div>
 
-        {/* ===== DETAIL VENSTER (MODAL) ===== */}
+        {/* DETAIL VENSTER (MODAL) */}
         {geselecteerdLid && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-            {/* Klik buiten venster om te sluiten */}
             <div className="absolute inset-0" onClick={() => setGeselecteerd(null)} />
-            
-            <div className="relative w-full max-w-lg bg-zinc-900 border-t sm:border border-white/20 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
-              {/* Swipe indicator voor mobiel */}
+            <div className="relative w-full max-w-lg bg-zinc-900 border-t border-white/20 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
               <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
-
               <div className="p-6">
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-pink-500">{geselecteerdLid.naam}</h2>
                     <p className="text-zinc-400 text-sm">{soortLabel(geselecteerdLid.soort)}</p>
                   </div>
-                  <button 
-                    onClick={() => setGeselecteerd(null)}
-                    className="bg-white/10 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/20 active:scale-90 transition"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => setGeselecteerd(null)} className="bg-white/10 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/20 transition">✕</button>
                 </div>
                 
-                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-                  {/* Contactgegevens */}
+                <div className="space-y-4">
+                  {/* CONTACT SECTIE MET WHATSAPP */}
                   <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-                    <span className="text-zinc-500 block text-[10px] uppercase font-bold tracking-wider mb-2">Contact</span>
-                    <a href={`mailto:${geselecteerdLid.email}`} className="text-pink-400 block mb-3 break-all underline text-base font-medium">
-                      {geselecteerdLid.email}
-                    </a>
-                    <div className="flex flex-col gap-2">
-                      <a href={`tel:${geselecteerdLid.tel1}`} className="text-pink-400 block underline text-base font-medium">
-                        📞 {geselecteerdLid.tel1}
-                      </a>
+                    <span className="text-zinc-500 block text-[10px] uppercase font-bold tracking-wider mb-2">Contactgegevens</span>
+                    <a href={`mailto:${geselecteerdLid.email}`} className="text-pink-400 block mb-4 break-all underline font-medium">{geselecteerdLid.email}</a>
+                    
+                    <div className="space-y-3">
+                      {/* Telefoon 1 */}
+                      <div className="flex items-center justify-between bg-black/30 p-2 rounded-lg">
+                        <span className="text-zinc-300 text-sm">{geselecteerdLid.tel1}</span>
+                        <div className="flex gap-2">
+                          <a href={`tel:${geselecteerdLid.tel1}`} className="bg-blue-500/20 text-blue-400 p-2 rounded-lg text-xs font-bold">📞 Bellen</a>
+                          <a href={formatWhatsApp(geselecteerdLid.tel1)} target="_blank" className="bg-green-500/20 text-green-400 p-2 rounded-lg text-xs font-bold">💬 WhatsApp</a>
+                        </div>
+                      </div>
+                      {/* Telefoon 2 (indien aanwezig) */}
                       {geselecteerdLid.tel2 && (
-                        <a href={`tel:${geselecteerdLid.tel2}`} className="text-pink-400 block underline text-base font-medium">
-                          📞 {geselecteerdLid.tel2} (tel 2)
-                        </a>
+                        <div className="flex items-center justify-between bg-black/30 p-2 rounded-lg">
+                          <span className="text-zinc-300 text-sm">{geselecteerdLid.tel2}</span>
+                          <div className="flex gap-2">
+                            <a href={`tel:${geselecteerdLid.tel2}`} className="bg-blue-500/20 text-blue-400 p-2 rounded-lg text-xs font-bold">📞 Bellen</a>
+                            <a href={formatWhatsApp(geselecteerdLid.tel2)} target="_blank" className="bg-green-500/20 text-green-400 p-2 rounded-lg text-xs font-bold">💬 WhatsApp</a>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Adres & Persoonlijk */}
                   <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-                    <span className="text-zinc-500 block text-[10px] uppercase font-bold tracking-wider mb-2">Adres & Info</span>
-                    <p className="text-zinc-200 text-base">{geselecteerdLid.adres}</p>
-                    <p className="text-zinc-200 text-base">{geselecteerdLid.postcode} {geselecteerdLid.plaats}</p>
-                    <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
-                      <span className="text-zinc-400 text-sm">🎂 Geboortedatum</span>
-                      <span className="text-zinc-200 text-sm font-medium">{geselecteerdLid.geboortedatum || "Onbekend"}</span>
-                    </div>
+                    <span className="text-zinc-500 block text-[10px] uppercase font-bold tracking-wider mb-2">Adres</span>
+                    <p className="text-zinc-200">{geselecteerdLid.adres}</p>
+                    <p className="text-zinc-200">{geselecteerdLid.postcode} {geselecteerdLid.plaats}</p>
+                    <p className="text-zinc-400 mt-2 text-sm">🎂 {geselecteerdLid.geboortedatum}</p>
                   </div>
-
-                  {/* Lessen */}
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-                    <span className="text-zinc-500 block text-[10px] uppercase font-bold tracking-wider mb-2">Ingeschreven voor</span>
-                    <p className="text-pink-300 font-semibold text-base">{geselecteerdLid.les}</p>
-                    {geselecteerdLid.les2 && (
-                      <p className="text-pink-300 font-semibold text-base mt-1">{geselecteerdLid.les2}</p>
-                    )}
-                  </div>
-
-                  {/* Toestemming */}
-                  {geselecteerdLid.toestemming && (
-                    <div className="p-2">
-                      <p className="text-[11px] text-zinc-500 italic">
-                        Toestemming beeldmateriaal: {geselecteerdLid.toestemming}
-                      </p>
-                    </div>
-                  )}
                 </div>
-                
-                <button 
-                  onClick={() => setGeselecteerd(null)}
-                  className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-bold mt-6 transition active:scale-[0.98]"
-                >
-                  Sluiten
-                </button>
+                <button onClick={() => setGeselecteerd(null)} className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-bold mt-6 transition">Sluiten</button>
               </div>
             </div>
           </div>
