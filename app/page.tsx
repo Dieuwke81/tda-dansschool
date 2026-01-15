@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -280,7 +279,7 @@ export default function HomePage() {
               "hover:border-pink-500/60 hover:bg-pink-500/10 active:scale-[0.99]",
             ].join(" ")}
           >
-            <span className="relative z-10 text-pink-400">Lesgroepen</span>
+            <span className="relative z-10 text-pink-400">Financieel Overzicht</span>
           </Link>
 
           {showWijzigingenLink && (
